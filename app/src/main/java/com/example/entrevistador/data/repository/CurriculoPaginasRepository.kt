@@ -18,9 +18,14 @@ import java.io.File
  * cada página num bitmap e mostrar isso como imagem.
  *
  * As páginas ficam em `cacheDir`: são feitas de novo quando o candidato é
- * aberto, e o sistema limpa sozinho quando falta espaço.
+ * aberto, e o sistema limpa sozinho quando falta espaço. Currículos que vêm de
+ * outro aparelho chegam como endereço do Storage; neste caso primeiro baixamos
+ * para o cache e então renderizamos (o caminho local já fica pronto aqui).
  */
-class CurriculoPaginasRepository(private val context: Context) {
+class CurriculoPaginasRepository(
+    private val context: Context,
+    private val anexoRepository: AnexoRepository,
+) {
 
     private val pasta: File
         get() = File(context.cacheDir, PASTA).apply { if (!exists()) mkdirs() }
@@ -36,7 +41,7 @@ class CurriculoPaginasRepository(private val context: Context) {
      * currículo reaproveita as imagens enquanto ele não mudar.
      */
     suspend fun paginas(caminho: String): Resultado = withContext(Dispatchers.IO) {
-        val arquivo = File(caminho)
+        val arquivo = File(anexoRepository.resolverLocal(caminho))
         if (!arquivo.exists()) {
             return@withContext Resultado.Erro("Currículo não encontrado.")
         }

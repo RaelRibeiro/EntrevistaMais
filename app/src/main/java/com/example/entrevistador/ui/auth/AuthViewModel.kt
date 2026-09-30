@@ -108,6 +108,21 @@ class AuthViewModel(private val authRepository: AuthRepository) : ViewModel() {
         }
     }
 
+    /** Entra com a conta Google, usando o idToken vindo da tela. */
+    fun entrarComGoogle(idToken: String) {
+        if (idToken.isBlank()) return
+        _estado.update { it.copy(carregando = true, erroGeral = null) }
+        viewModelScope.launch {
+            when (val resultado = authRepository.entrarComGoogle(idToken)) {
+                is ResultadoAuth.Erro ->
+                    _estado.update { it.copy(carregando = false, erroGeral = resultado.mensagem) }
+
+                ResultadoAuth.Sucesso ->
+                    _estado.update { it.copy(carregando = false) }
+            }
+        }
+    }
+
     fun esquecerSenha() {
         val email = _estado.value.email
         if (!email.matches(REGEX_EMAIL)) {

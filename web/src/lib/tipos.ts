@@ -75,9 +75,9 @@ export const ROTULO_TIPO: Record<TipoResposta, string> = {
   TEXTO: 'Texto',
   TEXTO_LONGO: 'Texto longo',
   NUMERO: 'Número',
-  SIM_NAO: 'Sim / Não',
+  SIM_NAO: 'Sim/Não',
   SECAO: 'Seção',
-  TABELA_EXPERIENCIAS: 'Locais onde trabalhou',
+  TABELA_EXPERIENCIAS: 'Tabela de locais',
 };
 
 export const RespostaAutomatica = {
@@ -91,11 +91,11 @@ export const RespostaAutomatica = {
 export type RespostaAutomatica = (typeof RespostaAutomatica)[keyof typeof RespostaAutomatica];
 
 export const ROTULO_AUTOMATICA: Record<RespostaAutomatica, string> = {
-  NENHUMA: 'Automático',
-  DIA_E_HORA: 'Dia e hora',
+  NENHUMA: 'Preencher manualmente',
+  DIA_E_HORA: 'Dia e hora da entrevista',
   NOME_CANDIDATO: 'Nome do candidato',
   TELEFONE_CANDIDATO: 'Telefone do candidato',
-  DADOS_DA_VAGA: 'Dados da vaga',
+  DADOS_DA_VAGA: 'Informações da vaga',
 };
 
 export const TipoCurriculo = {
@@ -141,6 +141,9 @@ export interface Entrevista {
   tipoCurriculo: TipoCurriculo;
   caminhoCurriculo: string;
   nomeArquivoCurriculo: string;
+  /** Preenchido ao iniciar (cronômetro) e ao concluir (duração real). */
+  inicioReal: number | null;
+  fimReal: number | null;
   criadoEm: number;
 }
 
@@ -150,6 +153,9 @@ export interface Vaga {
   empresa: string;
   tipoContrato: string;
   horarioTrabalho: string;
+  /** Minutos da meia-noite (gravação igual ao app); vazio até preencher. */
+  entradaMinutos: number;
+  saidaMinutos: number;
   salarioBeneficios: string;
   tempoExperiencia: string;
   escolaridade: string;
@@ -157,6 +163,15 @@ export interface Vaga {
   resumoAtividades: string;
   limiteCandidatos: number;
   criadoEm: number;
+}
+
+/** Exibe o horário de trabalho da vaga, dos campos do app ou do texto antigo. */
+export function horarioDaVaga(vaga: Pick<Vaga, 'horarioTrabalho' | 'entradaMinutos' | 'saidaMinutos'>): string {
+  if (Number.isFinite(vaga.entradaMinutos) && Number.isFinite(vaga.saidaMinutos)) {
+    const h = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+    return `${h(vaga.entradaMinutos)} às ${h(vaga.saidaMinutos)}`;
+  }
+  return vaga.horarioTrabalho;
 }
 
 export interface LinhaExperiencia {

@@ -14,3 +14,8 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Chave de assinatura de release (fica só nesta máquina, nunca subir)
+/app/keystore.properties
+*.jks
+*.keystore

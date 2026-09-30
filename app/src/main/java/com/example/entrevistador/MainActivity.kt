@@ -61,14 +61,14 @@ class MainActivity : ComponentActivity() {
 /**
  * Raiz do app.
  *
- * A sessão é observada do [com.example.entrevistador.data.auth.SessionStore], e
- * não de um estado local: por isso criar conta, entrar e sair já trocam a tela
- * sem nenhum código extra aqui. [SessaoCarregando] cobre o primeiro acesso ao
- * DataStore, que é rápido mas assíncrono.
+ * A sessão é observada do [com.example.entrevistador.data.auth.AuthRepository]
+ * (Firebase), e não de um estado local: por isso criar conta, entrar e sair já
+ * trocam a tela sem nenhum código extra aqui. [SessaoCarregando] cobre o
+ * primeiro acesso à sessão, que é rápido mas assíncrono.
  */
 @Composable
 fun AppEntrevistador(container: AppContainer) {
-    val usuario by container.sessionStore.usuario.collectAsStateWithLifecycle(
+    val usuario by container.authRepository.usuarioAtual.collectAsStateWithLifecycle(
         initialValue = Carregando,
     )
 

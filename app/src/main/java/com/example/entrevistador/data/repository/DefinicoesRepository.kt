@@ -1,61 +1,61 @@
 package com.example.entrevistador.data.repository
 
-import android.content.Context
-import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.intPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
+import com.example.entrevistador.data.firebase.FirestoreFontes
+import com.example.entrevistador.data.firebase.fluxo
 import com.example.entrevistador.domain.model.DefinicoesPadrao
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
-
-private val Context.dataStoreDefinicoes: DataStore<Preferences> by preferencesDataStore("definicoes")
+import kotlinx.coroutines.tasks.await
 
 /**
  * Só o que a [EntrevistaRepository] precisa saber.
  *
- * Existe para permitir testar o cálculo de agenda sem abrir o DataStore — o
- * repositório em si continua sendo quem lê e grava as preferências.
+ * Existe para permitir testar o cálculo de agenda sem abrir o Firestore — o
+ * repositório em si continua sendo quem lê e grava os valores.
  */
 interface ProvedorDefinicoes {
     suspend fun obter(): DefinicoesPadrao
 }
 
-/** Persiste os valores padrão definidos pelo recrutador. */
-class DefinicoesRepository(private val context: Context) : ProvedorDefinicoes {
+/**
+ * Valores padrão do recrutador, guardados no Firestore (`usuarios/{uid}`).
+ *
+ * É o mesmo critério de antes: qualquer mudança aqui é aplicada na agenda por
+ * quem consome (os horários são recalculados via [EntrevistaRepository]).
+ */
+class DefinicoesRepository internal constructor(private val fontes: FirestoreFontes) : ProvedorDefinicoes {
 
-    private object Chaves {
-        val horarioInicio = intPreferencesKey("horario_inicio")
-        val almocoInicio = intPreferencesKey("almoco_inicio")
-        val almocoFim = intPreferencesKey("almoco_fim")
-        val quantidadePorDia = intPreferencesKey("quantidade_por_dia")
-        val duracao = intPreferencesKey("duracao_minutos")
-        val intervalo = intPreferencesKey("intervalo_minutos")
+    private val documento get() = fontes.definicoes()
+
+    val definicoes: Flow<DefinicoesPadrao> = documento.fluxo { documentoSalvo ->
+        documentoSalvo?.paraDefinicoes() ?: DefinicoesPadrao.PADRAO
     }
 
-    val definicoes: Flow<DefinicoesPadrao> = context.dataStoreDefinicoes.data.map { prefs ->
-        DefinicoesPadrao(
-            horarioInicioMinutos = prefs[Chaves.horarioInicio] ?: DefinicoesPadrao.PADRAO.horarioInicioMinutos,
-            almocoInicioMinutos = prefs[Chaves.almocoInicio] ?: DefinicoesPadrao.PADRAO.almocoInicioMinutos,
-            almocoFimMinutos = prefs[Chaves.almocoFim] ?: DefinicoesPadrao.PADRAO.almocoFimMinutos,
-            quantidadePorDia = prefs[Chaves.quantidadePorDia] ?: DefinicoesPadrao.PADRAO.quantidadePorDia,
-            duracaoMinutos = prefs[Chaves.duracao] ?: DefinicoesPadrao.PADRAO.duracaoMinutos,
-            intervaloMinutos = prefs[Chaves.intervalo] ?: DefinicoesPadrao.PADRAO.intervaloMinutos,
-        )
+    /** Lê do Firestore direto (uma viagem), sem esperar pelo Flow. */
+    override suspend fun obter(): DefinicoesPadrao {
+        val documentoSalvo = runCatching { documento.get().await() }.getOrNull()
+        return documentoSalvo?.let { it.paraDefinicoes() } ?: DefinicoesPadrao.PADRAO
     }
-
-    override suspend fun obter(): DefinicoesPadrao = definicoes.first()
 
     suspend fun salvar(definicoes: DefinicoesPadrao) {
-        context.dataStoreDefinicoes.edit { prefs ->
-            prefs[Chaves.horarioInicio] = definicoes.horarioInicioMinutos
-            prefs[Chaves.almocoInicio] = definicoes.almocoInicioMinutos
-            prefs[Chaves.almocoFim] = definicoes.almocoFimMinutos
-            prefs[Chaves.quantidadePorDia] = definicoes.quantidadePorDia
-            prefs[Chaves.duracao] = definicoes.duracaoMinutos
-            prefs[Chaves.intervalo] = definicoes.intervaloMinutos
-        }
+        documento.set(
+            mapOf(
+                "horarioInicioMinutos" to definicoes.horarioInicioMinutos,
+                "almocoInicioMinutos" to definicoes.almocoInicioMinutos,
+                "almocoFimMinutos" to definicoes.almocoFimMinutos,
+                "quantidadePorDia" to definicoes.quantidadePorDia,
+                "duracaoMinutos" to definicoes.duracaoMinutos,
+                "intervaloMinutos" to definicoes.intervaloMinutos,
+            )
+        ).await()
     }
+
+    private fun com.google.firebase.firestore.DocumentSnapshot.paraDefinicoes(): DefinicoesPadrao =
+        DefinicoesPadrao(
+            horarioInicioMinutos = (getLong("horarioInicioMinutos") ?: DefinicoesPadrao.PADRAO.horarioInicioMinutos.toLong()).toInt(),
+            almocoInicioMinutos = (getLong("almocoInicioMinutos") ?: DefinicoesPadrao.PADRAO.almocoInicioMinutos.toLong()).toInt(),
+            almocoFimMinutos = (getLong("almocoFimMinutos") ?: DefinicoesPadrao.PADRAO.almocoFimMinutos.toLong()).toInt(),
+            quantidadePorDia = (getLong("quantidadePorDia") ?: DefinicoesPadrao.PADRAO.quantidadePorDia.toLong()).toInt(),
+            duracaoMinutos = (getLong("duracaoMinutos") ?: DefinicoesPadrao.PADRAO.duracaoMinutos.toLong()).toInt(),
+            intervaloMinutos = (getLong("intervaloMinutos") ?: DefinicoesPadrao.PADRAO.intervaloMinutos.toLong()).toInt(),
+        )
 }

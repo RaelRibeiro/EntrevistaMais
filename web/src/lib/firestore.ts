@@ -14,7 +14,14 @@ import {
   Timestamp,
   type DocumentSnapshot,
 } from 'firebase/firestore';
-import { obterDb } from './firebase';
+import {
+  ref,
+  uploadBytes,
+  getDownloadURL,
+  deleteObject,
+  type StorageReference,
+} from 'firebase/storage';
+import { obterDb, obterStorage } from './firebase';
 import type {
   Entrevista,
   Vaga,
@@ -22,6 +29,7 @@ import type {
   Pergunta,
   Definicoes,
   LinhaExperiencia,
+  TipoCurriculo,
 } from './tipos';
 import { numero } from './horario';
 import { calcularHorarios } from './agenda';
@@ -78,11 +86,99 @@ export const DEFINICOES_PADRAO: Definicoes = {
   intervaloMinutos: 0,
 };
 
+/** Perguntas padrão do processo — as mesmas 29 que o aplicativo cria no 1º login. */
 export const ROTEIRO_PADRAO_INICIAL = [
-  { titulo: 'Apresentação profissional', tipo: 'TEXTO_LONGO', dica: 'Peça um resumo da trajetória.', respostaAutomatica: 'NENHUMA' },
-  { titulo: 'Por que se candidatou a esta vaga?', tipo: 'TEXTO_LONGO', dica: '', respostaAutomatica: 'NENHUMA' },
-  { titulo: 'Experiências anteriores', tipo: 'TABELA_EXPERIENCIAS', dica: '', respostaAutomatica: 'NENHUMA' },
+  { titulo: 'Identificação', tipo: 'SECAO', dica: '', respostaAutomatica: 'NENHUMA' },
+  { titulo: 'Dia e Horário', tipo: 'TEXTO', dica: '', respostaAutomatica: 'DIA_E_HORA' },
+  { titulo: 'Nome', tipo: 'TEXTO', dica: '', respostaAutomatica: 'NOME_CANDIDATO' },
+  { titulo: 'Onde viu a vaga', tipo: 'TEXTO', dica: 'Indicação, site de vagas, indicação de amigo...', respostaAutomatica: 'NENHUMA' },
+  { titulo: 'Dados pessoais', tipo: 'SECAO', dica: '', respostaAutomatica: 'NENHUMA' },
+  { titulo: 'Idade', tipo: 'NUMERO', dica: '', respostaAutomatica: 'NENHUMA' },
+  { titulo: 'Escolaridade', tipo: 'TEXTO', dica: '', respostaAutomatica: 'NENHUMA' },
+  { titulo: 'Tem habilitação?', tipo: 'SIM_NAO', dica: '', respostaAutomatica: 'NENHUMA' },
+  { titulo: 'É casado?', tipo: 'SIM_NAO', dica: '', respostaAutomatica: 'NENHUMA' },
+  { titulo: 'Qual a profissão do marido/esposa?', tipo: 'TEXTO', dica: '', respostaAutomatica: 'NENHUMA' },
+  { titulo: 'Tem filhos?', tipo: 'SIM_NAO', dica: '', respostaAutomatica: 'NENHUMA' },
+  { titulo: 'Quantos filhos?', tipo: 'NUMERO', dica: '', respostaAutomatica: 'NENHUMA' },
+  { titulo: 'Moradia e família', tipo: 'SECAO', dica: '', respostaAutomatica: 'NENHUMA' },
+  { titulo: 'É daqui de Barbacena mesmo?', tipo: 'SIM_NAO', dica: '', respostaAutomatica: 'NENHUMA' },
+  { titulo: 'Mora em qual bairro?', tipo: 'TEXTO', dica: '', respostaAutomatica: 'NENHUMA' },
+  { titulo: 'Com quem mora atualmente?', tipo: 'TEXTO_LONGO', dica: '', respostaAutomatica: 'NENHUMA' },
+  { titulo: 'E a relação familiar é boa?', tipo: 'SIM_NAO', dica: '', respostaAutomatica: 'NENHUMA' },
+  { titulo: 'Saúde', tipo: 'SECAO', dica: '', respostaAutomatica: 'NENHUMA' },
+  { titulo: 'Faz o uso de alguma medicação, bebida ou cigarro?', tipo: 'TEXTO_LONGO', dica: '', respostaAutomatica: 'NENHUMA' },
+  { titulo: 'Já esteve internado(a) nos últimos anos?', tipo: 'SIM_NAO', dica: '', respostaAutomatica: 'NENHUMA' },
+  { titulo: 'Está trabalhando em algo atualmente?', tipo: 'SIM_NAO', dica: '', respostaAutomatica: 'NENHUMA' },
+  { titulo: 'Relacionamento interpessoal', tipo: 'SECAO', dica: '', respostaAutomatica: 'NENHUMA' },
+  { titulo: 'Relacionamento com a equipe (interpessoal)', tipo: 'TEXTO_LONGO', dica: '', respostaAutomatica: 'NENHUMA' },
+  { titulo: 'Remuneração', tipo: 'SECAO', dica: '', respostaAutomatica: 'NENHUMA' },
+  { titulo: 'Qual seu último salário? Qual sua pretensão salarial?', tipo: 'TEXTO_LONGO', dica: '', respostaAutomatica: 'NENHUMA' },
+  { titulo: 'Experiência profissional', tipo: 'SECAO', dica: '', respostaAutomatica: 'NENHUMA' },
+  { titulo: 'Gostaria que você falasse agora dos locais onde trabalhou, por quanto tempo e o porquê de ter saído', tipo: 'TABELA_EXPERIENCIAS', dica: '', respostaAutomatica: 'NENHUMA' },
+  { titulo: 'Informações da vaga', tipo: 'SECAO', dica: '', respostaAutomatica: 'NENHUMA' },
+  { titulo: 'Horário de trabalho, salário e benefícios, tempo de experiência, escolaridade, habilitação e atividades principais', tipo: 'TEXTO_LONGO', dica: '', respostaAutomatica: 'DADOS_DA_VAGA' },
 ] as const;
+
+/**
+ * Cria o roteiro padrão (com as perguntas acima) na primeira vez em que o
+ * usuário entra — igual ao aplicativo. Não faz nada se já existir um.
+ */
+export async function garantirRoteiroPadrao(uid: string): Promise<void> {
+  const consulta = await getDocs(query(colecoes(uid).roteiros));
+  if (consulta.docs.some((d) => d.data().padrao === true)) return;
+  const roteiroRef = await addDoc(colecoes(uid).roteiros, {
+    titulo: 'Roteiro de Entrevista',
+    conteudo: 'Roteiro de entrevista padrão',
+    ordem: 0,
+    padrao: true,
+    vagaId: null,
+  });
+  for (const [indice, pergunta] of ROTEIRO_PADRAO_INICIAL.entries()) {
+    await setDoc(doc(colecoes(uid).perguntas(roteiroRef.id)), {
+      ...pergunta,
+      ordem: indice,
+    });
+  }
+}
+
+/* ---------------- Currículo (Storage) ---------------- */
+
+const caminhoCurriculoDe = (uid: string, arquivo: File): string => {
+  const limpo = arquivo.name.replace(/[^\p{L}\p{N}._-]/gu, '_');
+  const base = limpo.replace(/\.[^.]+$/, '');
+  const ext = arquivo.name.match(/\.[^.]+$/)?.[0]?.toLowerCase() ?? '';
+  return `usuarios/${uid}/curriculos/${Date.now()}_${base}${ext}`;
+};
+
+const tipoCurriculoDe = (arquivo: File): TipoCurriculo => {
+  const nome = arquivo.name.toLowerCase();
+  return nome.endsWith('.pdf') ? 'PDF' : 'IMAGEM';
+};
+
+/** Envia o arquivo para o Storage e devolve o caminho e o tipo gravados. */
+export async function anexarCurriculo(
+  uid: string,
+  arquivo: File,
+): Promise<{ caminhoCurriculo: string; tipoCurriculo: TipoCurriculo }> {
+  const caminho = caminhoCurriculoDe(uid, arquivo);
+  const referencia: StorageReference = ref(obterStorage(), caminho);
+  await uploadBytes(referencia, arquivo);
+  return { caminhoCurriculo: caminho, tipoCurriculo: tipoCurriculoDe(arquivo) };
+}
+
+/** URL pública de download de um arquivo já gravado no Storage. */
+export async function urlDoCurriculo(caminho: string): Promise<string> {
+  return getDownloadURL(ref(obterStorage(), caminho));
+}
+
+/** Apaga o arquivo do Storage (usado ao remover o candidato ou trocar o anexo). */
+export async function apagarCurriculoArquivo(caminho: string): Promise<void> {
+  try {
+    await deleteObject(ref(obterStorage(), caminho));
+  } catch {
+    // Se a regra/arquivo não existir, o dado Firestore continua valendo.
+  }
+}
 
 function lerDefinicoesLidas(dados: Record<string, unknown>): Definicoes {
   return {
@@ -132,6 +228,8 @@ function vagaDoDocumento(snap: DocumentSnapshot): Vaga {
     empresa: '',
     tipoContrato: '',
     horarioTrabalho: '',
+    entradaMinutos: NaN,
+    saidaMinutos: NaN,
     salarioBeneficios: '',
     tempoExperiencia: '',
     escolaridade: '',
@@ -158,7 +256,7 @@ export async function criarVaga(uid: string, vaga: Omit<Vaga, 'id' | 'criadoEm'>
 }
 
 export async function atualizarVaga(uid: string, id: string, vaga: Omit<Vaga, 'id' | 'criadoEm'>): Promise<void> {
-  await setDoc(documentos(uid).vaga(id), { ...vaga, criadoEm: Timestamp.now() });
+  await setDoc(documentos(uid).vaga(id), vaga, { merge: true });
 }
 
 export async function removerVaga(uid: string, id: string): Promise<void> {
@@ -194,6 +292,8 @@ function entrevistaDoDocumento(snap: DocumentSnapshot): Entrevista {
     tipoCurriculo: 'RESUMO',
     caminhoCurriculo: '',
     nomeArquivoCurriculo: '',
+    inicioReal: null,
+    fimReal: null,
     criadoEm: 0,
   });
 }
@@ -211,7 +311,12 @@ export function observarEntrevistas(
 
 export async function adicionarEntrevista(
   uid: string,
-  dados: Pick<Entrevista, 'nome' | 'telefone' | 'data' | 'vagaId' | 'duracaoMinutos'>,
+  dados: Pick<Entrevista, 'nome' | 'telefone' | 'data' | 'vagaId' | 'duracaoMinutos'> & {
+    curriculo?: string;
+    tipoCurriculo?: TipoCurriculo;
+    caminhoCurriculo?: string;
+    nomeArquivoCurriculo?: string;
+  },
 ): Promise<void> {
   const definicoes = await lerDefinicoes(uid);
   const consulta = await getDocs(colecoes(uid).entrevistas);
@@ -220,6 +325,10 @@ export async function adicionarEntrevista(
     .map(entrevistaDoDocumento)
     .filter((e) => e.data === dados.data)
     .sort((a, b) => a.ordem - b.ordem);
+
+  if (lista.length >= definicoes.quantidadePorDia) {
+    throw new Error(`O dia já tem ${definicoes.quantidadePorDia} entrevistas, que é o limite definido.`);
+  }
 
   const calculado = calcularHorarios(
     {
@@ -241,10 +350,57 @@ export async function adicionarEntrevista(
     ordem: lista.length,
     status: 'AGENDADA',
     inicioManual: false,
-    curriculo: '',
-    tipoCurriculo: 'RESUMO',
+    curriculo: dados.curriculo ?? '',
+    tipoCurriculo: dados.tipoCurriculo ?? 'RESUMO',
+    caminhoCurriculo: dados.caminhoCurriculo ?? '',
+    nomeArquivoCurriculo: dados.nomeArquivoCurriculo ?? '',
     criadoEm: Timestamp.now(),
   });
+}
+
+/** Atualiza campos pontuais de uma entrevista (currículo, status, horários…). */
+export async function atualizarEntrevista(
+  uid: string,
+  id: string,
+  campos: Partial<Pick<Entrevista, 'status' | 'inicioReal' | 'fimReal' | 'curriculo' | 'tipoCurriculo' | 'caminhoCurriculo' | 'nomeArquivoCurriculo' | 'inicioManual' | 'inicioMinutos'>>,
+): Promise<void> {
+  await updateDoc(documentos(uid).entrevista(id), campos);
+}
+
+/**
+ * Recalcula os horários de um dia inteiro seguindo as Definições, respeitando
+ * pausa do almoço e os candidatos cujo horário foi alterado à mão ou que já
+ * estão em andamento. Igual ao botão "Recalcular" do aplicativo.
+ */
+export async function recalcularHorariosDoDia(uid: string, data: string): Promise<void> {
+  const definicoes = await lerDefinicoes(uid);
+  const consulta = await getDocs(colecoes(uid).entrevistas);
+
+  const pendentes = consulta.docs
+    .map(entrevistaDoDocumento)
+    .filter((e) => e.data === data && e.status !== 'ENCERRADA')
+    .sort((a, b) => a.ordem - b.ordem);
+
+  let cursor = definicoes.horarioInicioMinutos;
+  const promessas: Promise<void>[] = [];
+  for (const e of pendentes) {
+    if (e.inicioManual || e.status === 'EM_ANDAMENTO') {
+      cursor = e.inicioMinutos + e.duracaoMinutos + definicoes.intervaloMinutos;
+      continue;
+    }
+    if (cursor < definicoes.almocoInicioMinutos && e.inicioMinutos >= definicoes.almocoInicioMinutos) {
+      cursor = definicoes.almocoFimMinutos;
+    }
+    const duracao = e.duracaoMinutos || definicoes.duracaoMinutos;
+    promessas.push(
+      updateDoc(documentos(uid).entrevista(e.id), {
+        inicioMinutos: cursor,
+        duracaoMinutos: duracao,
+      }),
+    );
+    cursor += duracao + definicoes.intervaloMinutos;
+  }
+  await Promise.all(promessas);
 }
 
 export function observarEntrevista(
@@ -281,6 +437,15 @@ export async function moverEntrevista(uid: string, id: string, direcao: -1 | 1):
 }
 
 export async function removerEntrevista(uid: string, id: string): Promise<void> {
+  const snap = await getDoc(documentos(uid).entrevista(id));
+  const dados = snap.data();
+  const caminho = dados?.caminhoCurriculo as string | undefined;
+  if (caminho) void apagarCurriculoArquivo(caminho);
+
+  const experiencias = await getDocs(colecoes(uid).experiencias(id));
+  for (const linha of experiencias.docs) await deleteDoc(linha.ref);
+
+  await deleteDoc(respostasDoc(uid, id));
   await deleteDoc(documentos(uid).entrevista(id));
 }
 
@@ -366,6 +531,8 @@ export async function salvarRoteiro(
 }
 
 export async function apagarRoteiro(uid: string, id: string): Promise<void> {
+  const perguntas = await getDocs(colecoes(uid).perguntas(id));
+  for (const pergunta of perguntas.docs) await deleteDoc(pergunta.ref);
   await deleteDoc(documentos(uid).roteiro(id));
 }
 
@@ -403,4 +570,46 @@ export async function salvarExperiencia(
   linha: Omit<LinhaExperiencia, 'id' | 'entrevistaId'>,
 ): Promise<void> {
   await addDoc(colecoes(uid).experiencias(entrevistaId), linha);
+}
+
+export function observarExperiencias(
+  uid: string,
+  entrevistaId: string,
+  aoAtualizar: (linhas: LinhaExperiencia[]) => void,
+): () => void {
+  return onSnapshot(
+    query(colecoes(uid).experiencias(entrevistaId), orderBy('ordem', 'asc')),
+    (snap) =>
+      aoAtualizar(
+        snap.docs.map((doc) =>
+          lerDocumento<LinhaExperiencia>(doc, {
+            id: '',
+            entrevistaId,
+            local: '',
+            ano: '',
+            duracao: '',
+            cargo: '',
+            motivoSaida: '',
+            ordem: 0,
+          }),
+        ),
+      ),
+  );
+}
+
+export async function atualizarExperiencia(
+  uid: string,
+  entrevistaId: string,
+  id: string,
+  campos: Partial<Omit<LinhaExperiencia, 'id' | 'entrevistaId'>>,
+): Promise<void> {
+  await updateDoc(doc(colecoes(uid).experiencias(entrevistaId), id), campos);
+}
+
+export async function removerExperiencia(
+  uid: string,
+  entrevistaId: string,
+  id: string,
+): Promise<void> {
+  await deleteDoc(doc(colecoes(uid).experiencias(entrevistaId), id));
 }

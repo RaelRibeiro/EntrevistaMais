@@ -1,6 +1,7 @@
 import { initializeApp, getApps, type FirebaseApp } from 'firebase/app';
 import { getAuth, type Auth } from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
+import { getStorage, type FirebaseStorage } from 'firebase/storage';
 
 /**
  * Configuração do Firebase.
@@ -38,6 +39,7 @@ export function firebaseConfigurado(): boolean {
 let appRef: FirebaseApp | null = null;
 let authRef: Auth | null = null;
 let dbRef: Firestore | null = null;
+let storageRef: FirebaseStorage | null = null;
 
 export function obterApp(): FirebaseApp {
   if (!appRef) {
@@ -57,4 +59,9 @@ export function obterAuth(): Auth {
 export function obterDb(): Firestore {
   if (!dbRef) dbRef = getFirestore(obterApp());
   return dbRef;
+}
+
+export function obterStorage(): FirebaseStorage {
+  if (!storageRef) storageRef = getStorage(obterApp());
+  return storageRef;
 }

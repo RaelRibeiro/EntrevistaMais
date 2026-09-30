@@ -1,5 +1,8 @@
 package com.example.entrevistador.ui.auth
 
+import android.app.Activity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +20,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -28,12 +32,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.entrevistador.data.firebase.FirebaseConfig
 import com.example.entrevistador.ui.components.CampoTexto
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.ApiException
 
 /** Telas 1 e 2: entrar na conta e criar conta nova. */
 @Composable
@@ -96,6 +105,12 @@ fun LoginScreen(
                     habilitado = estado.podeEnviar,
                     aoClicar = viewModel::entrar,
                     modifier = Modifier.padding(top = 20.dp),
+                )
+
+                BotaoGoogle(
+                    carregando = estado.carregando,
+                    aoClicar = viewModel::entrarComGoogle,
+                    modifier = Modifier.padding(top = 12.dp),
                 )
 
                 TextButton(
@@ -265,5 +280,48 @@ private fun BotaoEntrar(
         } else {
             Text("Entrar")
         }
+    }
+}
+
+/**
+ * Entra com o Google (mesmo método do site). Fica oculto enquanto o web client
+ * ID não estiver configurado no [FirebaseConfig] — e-mail/senha já funciona.
+ */
+@Composable
+private fun BotaoGoogle(
+    carregando: Boolean,
+    aoClicar: (idToken: String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val idCliente = FirebaseConfig.GOOGLE_SERVER_CLIENT_ID
+    if (idCliente.isBlank()) return
+
+    val contexto = LocalContext.current
+    val clienteGoogle = remember(idCliente) {
+        GoogleSignIn.getClient(
+            contexto,
+            GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                .requestIdToken(idCliente)
+                .requestEmail()
+                .build()
+        )
+    }
+    val lancaGoogle = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { resultado ->
+        if (resultado.resultCode != Activity.RESULT_OK) return@rememberLauncherForActivityResult
+        val conta = runCatching {
+            GoogleSignIn.getSignedInAccountFromIntent(resultado.data)
+                .getResult(ApiException::class.java)
+        }.getOrNull()
+        conta?.idToken?.let(aoClicar)
+    }
+
+    OutlinedButton(
+        onClick = { lancaGoogle.launch(clienteGoogle.signInIntent) },
+        enabled = !carregando,
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Text("Entrar com Google")
     }
 }

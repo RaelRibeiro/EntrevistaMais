@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { useMobile, URL_APK } from '@/lib/useMobile';
+import { garantirRoteiroPadrao } from '@/lib/firestore';
 
 const ITENS = [
   { rota: '/agenda', rotulo: 'Agenda' },
@@ -26,6 +27,11 @@ export default function LayoutApp({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!carregando && !usuario) router.replace('/');
   }, [carregando, usuario, router]);
+
+  // Igual ao app: garante o roteiro padrão de 29 perguntas no primeiro login.
+  useEffect(() => {
+    if (usuario?.uid) void garantirRoteiroPadrao(usuario.uid);
+  }, [usuario?.uid]);
 
   if (carregando || !usuario) {
     return <main className="pagina">Carregando…</main>;

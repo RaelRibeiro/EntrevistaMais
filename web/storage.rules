@@ -1,0 +1,11 @@
+rules_version = '2';
+
+// Igual ao Firestore: cada usuário só acessa a própria pasta de currículos.
+// O site e o aplicativo Android usam o mesmo arquivo no Storage.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /usuarios/{uid}/{allPaths=**} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+  }
+}

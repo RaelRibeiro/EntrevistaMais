@@ -3,22 +3,34 @@ package com.example.entrevistador.data.repository
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import com.example.entrevistador.domain.model.TipoCurriculo
+import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import com.example.entrevistador.domain.model.TipoCurriculo
+import kotlinx.coroutines.tasks.await
 import java.io.File
 
 /**
- * Guarda o currículo anexado dentro do armazenamento interno do app.
+ * Guarda o currículo anexado e o envia para o Firebase Storage.
  *
- * Copiar é melhor do que guardar só a URI do seletor: permissão de URI
- * temporária pode ser revogada, e o arquivo sumiria da lista depois. Com uma
- * cópia em `filesDir/curriculos/` o PDF do candidato fica disponível sempre.
+ * O arquivo é copiado para o armazenamento interno do app (para renderizar
+ * imediatamente) e é enviado também para `usuarios/{uid}/curriculos/`: é isso
+ * que faz o currículo viajar com a entrevista para outro aparelho ou para o
+ * site. Nas Entrevistas, o campo de caminho guarda o endereço no Storage; na
+ * hora de abrir, a [CurriculoPaginasRepository] baixa para o cache daquele
+ * aparelho se o arquivo não estiver local.
  */
-class AnexoRepository(private val context: Context) {
+class AnexoRepository(
+    private val context: Context,
+    private val storage: FirebaseStorage,
+    private val uid: () -> String,
+) {
 
     private val pasta: File
         get() = File(context.filesDir, PASTA).apply { if (!exists()) mkdirs() }
+
+    private val pastaCacheNuvem: File
+        get() = File(context.cacheDir, PASTA_NUVEM).apply { if (!exists()) mkdirs() }
 
     /** Extensões que o app aceita como currículo. */
     fun ehAceito(uri: Uri): Boolean = tipoDeArquivo(uri) != null
@@ -56,9 +68,40 @@ class AnexoRepository(private val context: Context) {
         }
     }
 
-    suspend fun apagar(caminho: String) = withContext(Dispatchers.IO) {
-        runCatching { File(caminho).takeIf { it.exists() }?.delete() }
-        Unit
+    /**
+     * Envia a cópia local para o Storage e devolve o endereço (caminho no
+     * bucket). O caminho devolvido é o que deve ser gravado na entrevista.
+     */
+    suspend fun enviarParaNuvem(caminhoLocal: String, nomeArquivo: String): String = withContext(Dispatchers.IO) {
+        val destino = caminhoNoStorage(nomeArquivo)
+        storage.reference.child(destino)
+            .putFile(Uri.fromFile(File(caminhoLocal)))
+            .await()
+        destino
+    }
+
+    /** Baixa um currículo do Storage para o cache e devolve o caminho local. */
+    suspend fun baixarDaNuvem(caminhoNuvem: String): String = withContext(Dispatchers.IO) {
+        val destino = File(pastaCacheNuvem, sanear(caminhoNuvem.substringAfterLast('/')))
+        storage.reference.child(caminhoNuvem).getFile(destino).await()
+        destino.absolutePath
+    }
+
+    /**
+     * Apaga o currículo: arquivo no Storage (se o caminho for do Storage) e a
+     * cópia local quando ela existir neste aparelho.
+     */
+    suspend fun apagar(caminho: String) {
+        withContext(Dispatchers.IO) {
+            if (ehCaminhoNuvem(caminho)) {
+                runCatching { storage.reference.child(caminho).delete().await() }
+                val nome = sanear(caminho.substringAfterLast('/'))
+                File(pasta, nome).takeIf { it.exists() }?.delete()
+                File(pastaCacheNuvem, nome).takeIf { it.exists() }?.delete()
+            } else {
+                runCatching { File(caminho).takeIf { it.exists() }?.delete() }
+            }
+        }
     }
 
     suspend fun lerComoTexto(caminho: String): String? = withContext(Dispatchers.IO) {
@@ -66,6 +109,23 @@ class AnexoRepository(private val context: Context) {
         val arquivo = File(caminho)
         if (!arquivo.exists() || arquivo.length() > TAMANHO_MAXIMO_LEITURA) return@withContext null
         runCatching { arquivo.readText() }.getOrNull()
+    }
+
+    /** Um currículo que vive no Storage (endereço `usuarios/{uid}/curriculos/...`). */
+    fun ehCaminhoNuvem(caminho: String): Boolean = caminho.startsWith("usuarios/")
+
+    /** Resolve para um arquivo local: devolve o caminho como está ou baixa do Storage. */
+    suspend fun resolverLocal(caminho: String): String {
+        if (!ehCaminhoNuvem(caminho) || File(caminho).exists()) return caminho
+        val local = File(pastaCacheNuvem, sanear(caminho.substringAfterLast('/')))
+        if (local.exists()) return local.absolutePath
+        return baixarDaNuvem(caminho)
+    }
+
+    private fun caminhoNoStorage(nomeArquivo: String): String {
+        val extensao = nomeArquivo.substringAfterLast('.', "pdf").take(5)
+        val base = nomeArquivo.substringBeforeLast('.', "curriculo")
+        return "usuarios/${uid()}/curriculos/${System.currentTimeMillis()}_${sanear(base)}.$extensao"
     }
 
     private fun lerNome(uri: Uri): String? {
@@ -77,6 +137,10 @@ class AnexoRepository(private val context: Context) {
         }.getOrNull()
     }
 
+    /** Só caracteres seguros em caminhos de Storage. */
+    private fun sanear(nome: String): String =
+        nome.replace(Regex("[^A-Za-z0-9._-]"), "_").take(60)
+
     sealed interface Resultado {
         data class Sucesso(val caminho: String, val nomeOriginal: String) : Resultado
         data class Erro(val mensagem: String) : Resultado
@@ -84,6 +148,7 @@ class AnexoRepository(private val context: Context) {
 
     companion object {
         private const val PASTA = "curriculos"
+        private const val PASTA_NUVEM = "curriculos_nuvem"
         private const val TAMANHO_MAXIMO_LEITURA = 512L * 1024
 
         val TIPOS_IMAGEM = setOf(

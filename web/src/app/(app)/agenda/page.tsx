@@ -7,12 +7,22 @@ import {
   observarEntrevistas,
   adicionarEntrevista,
   atualizarStatus,
+  atualizarEntrevista,
   removerEntrevista,
   moverEntrevista,
+  anexarCurriculo,
+  recalcularHorariosDoDia,
   observarVagas,
 } from '@/lib/firestore';
 import type { Entrevista, StatusEntrevista, Vaga } from '@/lib/tipos';
-import { hojeIso, minutosParaHora } from '@/lib/horario';
+import { hojeIso, minutosParaHora, horaParaMinutos } from '@/lib/horario';
+
+function aplicarMascaraTelefone(entrada: string): string {
+  const digitos = entrada.replace(/\D/g, '').slice(0, 11);
+  if (digitos.length <= 2) return digitos.length ? `(${digitos}` : '';
+  if (digitos.length <= 7) return `(${digitos.slice(0, 2)}) ${digitos.slice(2)}`;
+  return `(${digitos.slice(0, 2)}) ${digitos.slice(2, 7)}-${digitos.slice(7)}`;
+}
 
 export default function PaginaAgenda() {
   const { usuario } = useAuth();
@@ -25,6 +35,8 @@ export default function PaginaAgenda() {
   const [nome, setNome] = useState('');
   const [telefone, setTelefone] = useState('');
   const [vagaId, setVagaId] = useState('');
+  const [arquivo, setArquivo] = useState<File | null>(null);
+  const [erro, setErro] = useState('');
 
   useEffect(() => {
     if (!uid) return;
@@ -37,18 +49,29 @@ export default function PaginaAgenda() {
   }, [uid]);
 
   const adicionar = async () => {
-    if (!nome.trim() || !uid) return;
-    await adicionarEntrevista(uid, {
-      nome: nome.trim(),
-      telefone: telefone.trim(),
-      data,
-      vagaId: vagaId || null,
-      duracaoMinutos: 45,
-    });
-    setNome('');
-    setTelefone('');
-    setVagaId('');
-    setFormAberto(false);
+    try {
+      if (!nome.trim() || !uid) return;
+      const anexo = arquivo ? await anexarCurriculo(uid, arquivo) : null;
+      await adicionarEntrevista(uid, {
+        nome: nome.trim(),
+        telefone: telefone.trim(),
+        data,
+        vagaId: vagaId || null,
+        duracaoMinutos: 45,
+        curriculo: anexo ? undefined : '',
+        tipoCurriculo: anexo?.tipoCurriculo,
+        caminhoCurriculo: anexo?.caminhoCurriculo,
+        nomeArquivoCurriculo: arquivo?.name ?? '',
+      });
+      setNome('');
+      setTelefone('');
+      setVagaId('');
+      setArquivo(null);
+      setErro('');
+      setFormAberto(false);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Não foi possível reservar o horário.');
+    }
   };
 
   return (
@@ -71,6 +94,15 @@ export default function PaginaAgenda() {
           value={data}
           onChange={(e) => setData(e.target.value)}
         />
+        <button
+          className="botao botao-secundario"
+          style={{ margin: 0 }}
+          onClick={() => {
+            if (confirm('Recalcular os horários deste dia?')) recalcularHorariosDoDia(uid, data);
+          }}
+        >
+          Recalcular
+        </button>
         <button className="botao" onClick={() => setFormAberto((v) => !v)}>
           Candidato
         </button>
@@ -92,6 +124,17 @@ export default function PaginaAgenda() {
           aoDescer={() => moverEntrevista(uid, e.id, 1)}
           aoRemover={() => removerEntrevista(uid, e.id)}
           aoMudarStatus={(status) => atualizarStatus(uid, e.id, status)}
+          aoAlterarHorario={() => {
+            const hora = prompt(
+              `Novo horário para ${e.nome} (HH:MM). O horário dele deixa de ser automático.`,
+              minutosParaHora(e.inicioMinutos),
+            );
+            if (!hora) return;
+            const minutos = horaParaMinutos(hora.trim());
+            if (Number.isFinite(minutos)) {
+              atualizarEntrevista(uid, e.id, { inicioMinutos: minutos, inicioManual: true });
+            }
+          }}
         />
       ))}
 
@@ -99,7 +142,8 @@ export default function PaginaAgenda() {
         <div className="cartao">
           <strong>Novo candidato — {data}</strong>
           <p className="dica">
-            O horário é calculado sozinho pelas Definições.
+            O horário é calculado sozinho pelas Definições. Você pode anexar o
+            currículo (PDF ou foto) — ele abre no cartão da entrevista.
           </p>
           <input
             className="campo"
@@ -109,9 +153,9 @@ export default function PaginaAgenda() {
           />
           <input
             className="campo"
-            placeholder="Telefone"
+            placeholder="(XX) 00000-0000"
             value={telefone}
-            onChange={(e) => setTelefone(e.target.value)}
+            onChange={(e) => setTelefone(aplicarMascaraTelefone(e.target.value))}
           />
           <select
             className="campo"
@@ -125,6 +169,25 @@ export default function PaginaAgenda() {
               </option>
             ))}
           </select>
+          <label className="campo arquivo">
+            {arquivo ? `📎 ${arquivo.name}` : '📄 Anexar currículo (PDF ou imagem)'}
+            <input
+              type="file"
+              accept=".pdf,image/*"
+              style={{ display: 'none' }}
+              onChange={(e) => setArquivo(e.target.files?.[0] ?? null)}
+            />
+          </label>
+          {erro && (
+            <p className="dica" style={{ color: 'var(--erro, #c0392b)' }}>
+              {erro}
+            </p>
+          )}
+          {arquivo && (
+            <div className="dica" style={{ margin: 0 }}>
+              O arquivo é enviado ao cadastrar.
+            </div>
+          )}
           <div className="acoes">
             <button className="botao" onClick={adicionar}>
               Reservar horário
@@ -161,6 +224,7 @@ function CartaoCandidato({
   aoDescer,
   aoRemover,
   aoMudarStatus,
+  aoAlterarHorario,
 }: {
   entrevista: Entrevista;
   vaga: string;
@@ -169,6 +233,7 @@ function CartaoCandidato({
   aoDescer: () => void;
   aoRemover: () => void;
   aoMudarStatus: (status: StatusEntrevista) => void;
+  aoAlterarHorario: () => void;
 }) {
   const conclusa = e.status === 'CONCLUIDA';
   const encerrada = e.status === 'ENCERRADA';
@@ -179,6 +244,11 @@ function CartaoCandidato({
       <div className="candidato-nome">
         {e.nome}
         {vaga && <div className="dica" style={{ margin: 0 }}>{vaga}</div>}
+        {e.nomeArquivoCurriculo && (
+          <div className="dica" style={{ margin: 0 }}>
+            📎 {e.nomeArquivoCurriculo}
+          </div>
+        )}
         {e.inicioManual && (
           <div className="dica" style={{ margin: 0, color: 'var(--primaria)' }}>
             Horário alterado
@@ -199,6 +269,24 @@ function CartaoCandidato({
             </button>
           </>
         )}
+        {e.status === 'AGENDADA' && (
+          <>
+            <button
+              className="botao botao-secundario"
+              style={{ padding: '6px 14px', fontSize: 13 }}
+              onClick={() => aoMudarStatus('NAO_COMPARECEU')}
+            >
+              Não compareceu
+            </button>
+            <button
+              className="botao botao-secundario"
+              style={{ padding: '6px 14px', fontSize: 13 }}
+              onClick={() => aoMudarStatus('CANCELADA')}
+            >
+              Cancelar
+            </button>
+          </>
+        )}
         {e.status === 'EM_ANDAMENTO' && (
           <button
             className="botao"
@@ -210,6 +298,13 @@ function CartaoCandidato({
         )}
         {conclusa && (
           <div className="acoes" style={{ margin: 0 }}>
+            <button
+              className="botao botao-secundario"
+              style={{ padding: '6px 14px', fontSize: 13 }}
+              onClick={() => aoMudarStatus('ENCERRADA')}
+            >
+              Encerrar
+            </button>
             <button
               className="botao botao-perigo"
               style={{ padding: '6px 14px', fontSize: 13 }}
@@ -233,6 +328,24 @@ function CartaoCandidato({
             onClick={() => aoMudarStatus('CONCLUIDA')}
           >
             Voltar
+          </button>
+        )}
+        {!encerrada && (
+          <button
+            className="icone-botao"
+            title="Alterar horário"
+            onClick={aoAlterarHorario}
+          >
+            🕐
+          </button>
+        )}
+        {encerrada && (
+          <button
+            className="botao botao-secundario"
+            style={{ padding: '6px 14px', fontSize: 13 }}
+            onClick={() => aoMudarStatus('CONCLUIDA')}
+          >
+            Reabrir
           </button>
         )}
         {e.status === 'AGENDADA' && (

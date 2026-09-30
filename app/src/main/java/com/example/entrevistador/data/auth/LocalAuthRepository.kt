@@ -82,6 +82,9 @@ class LocalAuthRepository(
         return ResultadoAuth.Sucesso
     }
 
+    override suspend fun entrarComGoogle(idToken: String): ResultadoAuth =
+        ResultadoAuth.Erro("Login com Google disponível apenas na versão com Firebase.")
+
     override suspend fun atualizarNome(nome: String): ResultadoAuth {
         if (nome.isBlank()) return ResultadoAuth.Erro("Informe um nome.")
         val usuario = sessionStore.usuarioAtual() ?: return ResultadoAuth.Erro("Sessão expirada.")

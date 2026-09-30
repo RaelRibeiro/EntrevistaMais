@@ -4,12 +4,10 @@ import com.example.entrevistador.domain.model.Usuario
 import kotlinx.coroutines.flow.Flow
 
 /**
- * Ponto único de troca do login.
+ * Login do usuário.
  *
- * Hoje o app usa a [LocalAuthRepository] (offline, sem configuração). Para
- * migrar para o Firebase basta ligar a flag `entrevistador.firebase=true` em
- * gradle.properties e colocar o google-services.json: o [AppContainer] passa a
- * injetar a FirebaseAuthRepository e nenhuma tela muda.
+ * Hoje é sempre o Firebase (mesma conta do site Entrevista+): a [FirebaseAuthRepository]
+ * autentica, mantém a sessão e grava a raiz `usuarios/{uid}` dos dados.
  */
 interface AuthRepository {
 
@@ -20,6 +18,9 @@ interface AuthRepository {
     suspend fun criarConta(nome: String, email: String, senha: String): ResultadoAuth
 
     suspend fun entrar(email: String, senha: String): ResultadoAuth
+
+    /** Entra com o idToken do Google (vindo da tela via GoogleSignIn). */
+    suspend fun entrarComGoogle(idToken: String): ResultadoAuth
 
     /** Atualiza o nome de exibição do usuário logado. */
     suspend fun atualizarNome(nome: String): ResultadoAuth

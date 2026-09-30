@@ -291,10 +291,15 @@ class EntrevistaViewModel(
             }
             when (val resultado = anexoRepository.copiar(uri)) {
                 is AnexoRepository.Resultado.Sucesso -> {
+                    // O endereço no Storage é o que fica gravado na entrevista;
+                    // assim o currículo abre em qualquer aparelho (e no site).
+                    val caminho = runCatching {
+                        anexoRepository.enviarParaNuvem(resultado.caminho, resultado.nomeOriginal)
+                    }.getOrDefault(resultado.caminho)
                     entrevistaRepository.salvarCurriculoAnexado(
                         entrevista.id,
                         tipo,
-                        resultado.caminho,
+                        caminho,
                         resultado.nomeOriginal,
                     )
                     _estado.update {

@@ -8,6 +8,7 @@ import {
   salvarRoteiro,
   apagarRoteiro,
   ROTEIRO_PADRAO_INICIAL,
+  garantirRoteiroPadrao,
   observarVagas,
 } from '@/lib/firestore';
 import type { Roteiro, Pergunta, Vaga, TipoResposta, RespostaAutomatica } from '@/lib/tipos';
@@ -29,6 +30,12 @@ export default function PaginaRoteiro() {
   useEffect(() => {
     if (!uid) return;
     return observarVagas(uid, setVagas);
+  }, [uid]);
+
+  // Igual ao app: o roteiro padrão nasce com as 29 perguntas no primeiro acesso.
+  useEffect(() => {
+    if (!uid) return;
+    void garantirRoteiroPadrao(uid);
   }, [uid]);
 
   // Perguntas de roteiros que já estão em tela.
@@ -132,11 +139,19 @@ export default function PaginaRoteiro() {
           roteiroId={alvo.roteiro?.id ?? null}
           tituloBase={
             alvo.vagaId
-              ? `Roteiro da vaga — ${vagas.find((v) => v.id === alvo.vagaId)?.titulo ?? ''}`
+              ? alvo.roteiro
+                ? `Roteiro da vaga — ${vagas.find((v) => v.id === alvo.vagaId)?.titulo ?? ''}`
+                : `${padrao?.titulo ?? 'Roteiro padrão'} — ${vagas.find((v) => v.id === alvo.vagaId)?.titulo ?? ''}`
               : 'Roteiro padrão'
           }
           vagaId={alvo.vagaId}
-          perguntasIniciais={alvo.roteiro ? perguntas[alvo.roteiro.id] ?? [] : []}
+          perguntasIniciais={
+            alvo.roteiro
+              ? perguntas[alvo.roteiro.id] ?? []
+              : alvo.vagaId
+                ? (perguntas[padrao?.id ?? ''] ?? []).map((p) => ({ ...p, id: '' }))
+                : []
+          }
           aoFechar={() => setAlvo(null)}
         />
       )}
@@ -211,12 +226,30 @@ function EditorRoteiro({
               ROTEIRO_PADRAO_INICIAL.map((p) => ({
                 ...p,
                 tipo: p.tipo as TipoResposta,
-                respostaAutomatica: 'NENHUMA',
+                respostaAutomatica: p.respostaAutomatica as RespostaAutomatica,
               })),
             )
           }
         >
           Usar perguntas iniciais
+        </button>
+      )}
+
+      {!vaiTerConteudo && !vagaId && roteiroId && (
+        <button
+          className="botao botao-secundario"
+          onClick={() => {
+            if (!confirm('Restaurar as perguntas originais do roteiro padrão?')) return;
+            setLista(
+              ROTEIRO_PADRAO_INICIAL.map((p) => ({
+                ...p,
+                tipo: p.tipo as TipoResposta,
+                respostaAutomatica: p.respostaAutomatica as RespostaAutomatica,
+              })),
+            );
+          }}
+        >
+          Restaurar perguntas originais
         </button>
       )}
 

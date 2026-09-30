@@ -149,6 +149,26 @@ a {
   color: #1f6feb;
 }
 
+.status.em_andamento {
+  background: #fff4e0;
+  color: #b06000;
+}
+
+.status.agendada {
+  background: #eef1f5;
+  color: var(--texto-suave);
+}
+
+.status.nao_compareceu {
+  background: #f1e9f7;
+  color: #7a4da7;
+}
+
+.status.cancelada {
+  background: #eaecf3;
+  color: #7a8493;
+}
+
 .status.encerrada {
   background: #eaecf3;
   color: #5f6b7a;
@@ -222,6 +242,16 @@ a {
 .campo:focus {
   outline: 2px solid var(--primaria);
   border-color: transparent;
+}
+
+label.campo.arquivo {
+  display: block;
+  cursor: pointer;
+  color: var(--primaria);
+  font-weight: 600;
+  text-align: center;
+  border-style: dashed;
+  border-width: 2px;
 }
 
 .fieldset {

@@ -1,3 +1,23 @@
+// ---------------------------------------------------------------------------
+// Assinatura de release
+// ----------------------------------------------------------------------------
+// A chave vive em Downloads (entrevistador-release.jks) e as credenciais em
+// app/keystore.properties — arquivo que NÃO sobe para o GitHub (gitignore).
+// Com isso o Google deixa de mostrar "app desconhecido" no download.
+// ---------------------------------------------------------------------------
+import java.io.File as ArquivoChave
+
+val keystoreProperties = run {
+    val arquivo = rootProject.file("app/keystore.properties")
+    if (!arquivo.exists()) return@run emptyMap()
+    arquivo.readLines()
+        .filter { it.contains("=") }
+        .associate { linha ->
+            val indice = linha.indexOf("=")
+            linha.substring(0, indice).trim() to linha.substring(indice + 1).trim()
+        }
+}
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -5,33 +25,12 @@ plugins {
 }
 
 // ---------------------------------------------------------------------------
-// Firebase (opcional)
+// Firebase
 // ----------------------------------------------------------------------------
-// O app funciona 100% offline com o login local (implementação padrão).
-// Para migrar para o Firebase Auth:
-//   1. Baixe o google-services.json e coloque em app/google-services.json
-//   2. Troque `entrevistador.firebase=false` por `true` em gradle.properties
-// Nenhuma outra alteração de código é necessária: o AuthRepository continua
-// sendo o mesmo, só muda a implementação injetada no AppContainer.
-// ---------------------------------------------------------------------------
-val firebaseEnabled = providers.gradleProperty("entrevistador.firebase")
-    .map { it.trim().equals("true", ignoreCase = true) }
-    .getOrElse(false)
-
-if (providers.gradleProperty("entrevistador.firebase").isPresent) {
-    // Mantém o build determinístico: sem o arquivo json o build falharia.
-    val jsonPresent = file("google-services.json").exists()
-    if (firebaseEnabled && !jsonPresent) {
-        throw GradleException(
-            "entrevistador.firebase=true, mas app/google-services.json não existe. " +
-                "Baixe o arquivo no console do Firebase ou defina entrevistador.firebase=false."
-        )
-    }
-}
-
-if (firebaseEnabled) {
-    apply(plugin = "com.google.gms.google-services")
-}
+// O app usa o mesmo Firebase do site (Auth + Firestore + Storage).
+// A inicialização é feita em código (FirebaseConfig.kt), então não é preciso
+// do google-services.json nem do plugin Google Services.
+// ----------------------------------------------------------------------------
 
 android {
     namespace = "com.example.entrevistador"
@@ -53,6 +52,17 @@ android {
         compose = true
     }
 
+    signingConfigs {
+        create("release") {
+            val caminho = keystoreProperties["keystoreFile"] ?: return@create
+            if (!ArquivoChave(caminho).exists()) return@create
+            storeFile = ArquivoChave(caminho)
+            storePassword = keystoreProperties["keystorePassword"]
+            keyAlias = keystoreProperties["keyAlias"]
+            keyPassword = keystoreProperties["keyPassword"]
+        }
+    }
+
     // java.time (LocalDate/LocalTime) no minSdk 24
     compileOptions {
         isCoreLibraryDesugaringEnabled = true
@@ -65,17 +75,15 @@ android {
             optimization {
                 enable = false
             }
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 }
 
-// A implementação de auth do Firebase só entra no conjunto de fontes quando
-// a flag está ligada, para que o build padrão não dependa do Firebase.
-// Com o Kotlin embutido do AGP 9 o caminho é android.sourceSets (o
-// kotlin.sourceSets não é permitido aqui).
-if (firebaseEnabled) {
-    android.sourceSets.getByName("main").java.srcDir("src/firebase/java")
-}
+// ---------------------------------------------------------------------------
+// Firebase (Auth + Firestore + Storage). Como o app precisa da mesma conta e
+// dos mesmos dados do site, o Firebase entra sempre no conjunto de fontes.
+// ---------------------------------------------------------------------------
 
 dependencies {
     implementation(libs.androidx.core.ktx)
@@ -110,12 +118,15 @@ dependencies {
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.kotlinx.coroutines.play.services)
     coreLibraryDesugaring(libs.desugar.jdk.libs)
 
-    if (firebaseEnabled) {
-        implementation(platform(libs.firebase.bom))
-        implementation(libs.firebase.auth)
-    }
+    // Firebase (mesmo projeto do site)
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.auth)
+    implementation(libs.firebase.firestore)
+    implementation(libs.firebase.storage)
+    implementation(libs.play.services.auth)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.espresso.core)

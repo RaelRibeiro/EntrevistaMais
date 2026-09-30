@@ -183,12 +183,19 @@ class AgendaViewModel(
                 else -> TipoCurriculo.IMAGEM
             }
             when (val resultado = anexoRepository.copiar(uri)) {
-                is AnexoRepository.Resultado.Sucesso -> _formulario.update {
-                    it.copy(
-                        caminhoArquivo = resultado.caminho,
-                        nomeArquivo = resultado.nomeOriginal,
-                        tipoArquivo = tipo,
-                    )
+                is AnexoRepository.Resultado.Sucesso -> {
+                    // Guarda o endereço no Storage: é ele que viaja no Firestore
+                    // para o currículo abrir em qualquer aparelho (e no site).
+                    val caminho = runCatching {
+                        anexoRepository.enviarParaNuvem(resultado.caminho, resultado.nomeOriginal)
+                    }.getOrDefault(resultado.caminho)
+                    _formulario.update {
+                        it.copy(
+                            caminhoArquivo = caminho,
+                            nomeArquivo = resultado.nomeOriginal,
+                            tipoArquivo = tipo,
+                        )
+                    }
                 }
 
                 is AnexoRepository.Resultado.Erro ->
