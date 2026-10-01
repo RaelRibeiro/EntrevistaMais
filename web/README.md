@@ -25,7 +25,7 @@ aparece no site e vice-versa.
 - PWA: no celular com Chrome, o site pode ser adicionado à tela inicial.
 
 O site e o aplicativo Android compartilham a **mesma conta e os mesmos dados**
-(Firebase Auth + Firestore + Storage), então um candidato cadastrado no celular
+(Firebase Auth + Firestore), então um candidato cadastrado no celular
 aparece no site e vice-versa — inclusive os currículos anexados.
 
 ## Estrutura do banco (Firestore)
@@ -50,10 +50,24 @@ campo `id` é gravado como número. É o que o aplicativo Android lê
 que o site grava precisa ter o `id` numérico. Por isso nada de `addDoc`
 (id automático): o site escolhe o número e grava em `setDoc`.
 
-Currículos anexados vão para o **Storage** em
-`usuarios/{uid}/curriculos/{timestamp}_{nome}.{ext}`. As regras de segurança
-são `firestore.rules` (Firestore) e `storage.rules` (Storage), ambas na pasta
-`web/`.
+Currículos anexados vão para o **Firestore**, em
+`usuarios/{uid}/curriculos/{documento}`, com os pedaços do arquivo em
+`usuarios/{uid}/curriculos/{documento}/partes/`. A regra de segurança é
+`firestore.rules`, na pasta `web/`.
+
+> **Por que o arquivo vai para o Firestore e não para o Storage?** O Storage do
+> Firebase só é liberado com faturamento ativo no projeto, o que exige cartão de
+> crédito. Como o uso é de poucos arquivos, o currículo é guardado no próprio
+> Firestore, que já está no nível gratuito. O Firestore aceita no máximo 1 MiB
+> por documento, então o arquivo é convertido para base64 (que infla o tamanho
+> em 33%) e dividido em pedaços de 500 mil caracteres. Na leitura os pedaços
+> voltam, são concatenados e decodificados de volta ao arquivo.
+>
+> O custo: base64 ocupa um terço a mais de espaço, abrir o currículo lê um
+> documento a mais e a cota do Firestore se esgota mais rápido do que com um
+> storage de verdade. O arquivo tem limite de 5 MB. Em troca, nenhuma
+> configuração de servidor, nenhum cartão e a privacidade por usuário continua
+> garantida pelas regras do Firestore.
 
 ## Como colocar no ar (passo a passo)
 
@@ -67,22 +81,12 @@ são `firestore.rules` (Firestore) e `storage.rules` (Storage), ambas na pasta
    - modo **produção**, região perto de você.
 4. Cole as regras de segurança (arquivo `firestore.rules` da pasta `web/`) no
    botão **Regras** da aba Firestore e clique em **Publicar**. Sem isto, o site
-   funciona mas ninguém consegue ler/escrever.
-5. No menu **Build → Storage**, clique em **Começar** (região padrão já usada)
-   e publique as regras do arquivo `storage.rules` da pasta `web/` na aba
-   **Regras**. Sem isto, anexar currículo falha.
-6. **CORS do bucket** (obrigatório para o site, opcional para o app): o
-   navegador é bloqueado pelo bucket ao enviar/baixar currículo. Com o
-   [Google Cloud CLI](https://cloud.google.com/sdk/docs/install) instalado e
-   autenticado (`gcloud auth login`, `gcloud config set project entrevistamais-a25e1`):
-
-   ```bash
-   gcloud storage buckets update gs://entrevistamais-a25e1.firebasestorage.app --cors-file=web/cors.json
-   ```
-
-   Sem isso o anexo dá erro de CORS; o candidato continua sendo cadastrado
-   (sem arquivo) e um aviso aparece na tela.
-7. Em **Configurações do projeto → Seus apps**, adicione um app **Web** (ícone
+   funciona mas ninguém consegue ler/escrever. **As regras precisam ser
+   `service cloud.firestore`** — as do Storage (`service firebase.storage`) não
+   valem aqui e, se forem publicadas nesta aba, todo acesso a dado é negado.
+5. **Não é preciso ativar o Storage.** O currículo vai para o Firestore, então o
+   projeto fica inteiro no plano gratuito, sem cartão.
+6. Em **Configurações do projeto → Seus apps**, adicione um app **Web** (ícone
    `</>`), copie a configuração e preencha o arquivo `web/.env.local` (use o
    `.env.local.example` como modelo).
 
@@ -129,7 +133,7 @@ são `firestore.rules` (Firestore) e `storage.rules` (Storage), ambas na pasta
    sem isso o login Google falha na versão assinada (a chave de debug tem outra
    impressão digital).
 
-O app Android usa o mesmo Firebase (Auth + Firestore + Storage) do site — conta,
+O app Android usa o mesmo Firebase (Auth + Firestore) do site — conta,
 vagas, entrevistas, roteiros e currículos são compartilhados.
 
 ## Comandos de desenvolvimento

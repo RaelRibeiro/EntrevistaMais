@@ -58,7 +58,7 @@ export default function PaginaAgenda() {
           anexo = await anexarCurriculo(uid, arquivo);
         } catch {
           avisoAnexo =
-            'Currículo não pôde ser enviado (Storage) — candidato cadastrado sem arquivo.';
+            'Currículo não pôde ser enviado — candidato cadastrado sem arquivo.';
         }
       }
       await adicionarEntrevista(uid, {

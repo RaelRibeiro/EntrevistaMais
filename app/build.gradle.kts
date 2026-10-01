@@ -27,7 +27,7 @@ plugins {
 // ---------------------------------------------------------------------------
 // Firebase
 // ----------------------------------------------------------------------------
-// O app usa o mesmo Firebase do site (Auth + Firestore + Storage).
+// O app usa o mesmo Firebase do site (Auth + Firestore).
 // A inicialização é feita em código (FirebaseConfig.kt), então não é preciso
 // do google-services.json nem do plugin Google Services.
 // ----------------------------------------------------------------------------
@@ -81,7 +81,7 @@ android {
 }
 
 // ---------------------------------------------------------------------------
-// Firebase (Auth + Firestore + Storage). Como o app precisa da mesma conta e
+// Firebase (Auth + Firestore). Como o app precisa da mesma conta e
 // dos mesmos dados do site, o Firebase entra sempre no conjunto de fontes.
 // ---------------------------------------------------------------------------
 
@@ -125,7 +125,6 @@ dependencies {
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.auth)
     implementation(libs.firebase.firestore)
-    implementation(libs.firebase.storage)
     implementation(libs.play.services.auth)
 
     testImplementation(libs.junit)

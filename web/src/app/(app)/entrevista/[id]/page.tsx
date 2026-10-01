@@ -229,9 +229,12 @@ function BlocoCurriculo({
     if (!e.caminhoCurriculo) return;
     try {
       const url = await urlDoCurriculo(e.caminhoCurriculo);
-      window.open(url, '_blank');
+      const novaAba = window.open(url, '_blank');
+      // A URL é montada na hora a partir dos pedaços guardados; se a aba
+      // abrir, o navegador não pode liberar a memória junto com a imagem.
+      if (!novaAba) setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch {
-      setErroAnexo('Não consegui gerar o link do currículo (Storage).');
+      setErroAnexo('Não consegui buscar este currículo no banco de dados.');
     }
   };
 
@@ -246,10 +249,9 @@ function BlocoCurriculo({
         nomeArquivoCurriculo: novo.name,
       });
       setErroAnexo('');
-    } catch {
-      setErroAnexo(
-        'Não consegui enviar o currículo (Storage). Verifique as regras do bucket e o CORS.',
-      );
+    } catch (erro) {
+      const detalhe = erro instanceof Error ? erro.message : '';
+      setErroAnexo(`Não consegui enviar o currículo. ${detalhe}`.trim());
     }
   };
 

@@ -291,8 +291,8 @@ class EntrevistaViewModel(
             }
             when (val resultado = anexoRepository.copiar(uri)) {
                 is AnexoRepository.Resultado.Sucesso -> {
-                    // O endereço no Storage é o que fica gravado na entrevista;
-                    // assim o currículo abre em qualquer aparelho (e no site).
+                    // O endereço do currículo no Firestore é o que fica gravado
+                    // na entrevista; assim ele abre em qualquer aparelho (e no site).
                     val caminho = runCatching {
                         anexoRepository.enviarParaNuvem(resultado.caminho, resultado.nomeOriginal)
                     }.getOrDefault(resultado.caminho)

@@ -25,7 +25,7 @@ object AuthRepositoryProvider {
     }
 }
 
-/** Constrói as fontes Firestore do usuário (DAOs, definições, storage). */
+/** Constrói as fontes Firestore do usuário (DAOs, definições, currículos). */
 internal fun fontesFirestore(context: Context): FirestoreFontes {
     val appContext = context.applicationContext
     return FirestoreFontes(

@@ -20,8 +20,9 @@ import java.io.FileNotFoundException
  *
  * As páginas ficam em `cacheDir`: são feitas de novo quando o candidato é
  * aberto, e o sistema limpa sozinho quando falta espaço. Currículos que vêm de
- * outro aparelho chegam como endereço do Storage; neste caso primeiro baixamos
- * para o cache e então renderizamos (o caminho local já fica pronto aqui).
+ * outro aparelho chegam como endereço do Firestore; neste caso primeiro
+ * buscamos o arquivo para o cache e então renderizamos (o caminho local já fica
+ * pronto aqui).
  */
 class CurriculoPaginasRepository(
     private val context: Context,
@@ -38,7 +39,7 @@ class CurriculoPaginasRepository(
      * PDF é convertido página a página. Imagem não precisa de conversão: ela
      * entra na lista como está, e a tela trata igual.
      *
-     * O nome do arquivo no cache inclui o caminho de origem, então o mesmo
+     * O nome da pasta no cache inclui o caminho de origem, então o mesmo
      * currículo reaproveita as imagens enquanto ele não mudar.
      */
     suspend fun paginas(caminho: String): Resultado = withContext(Dispatchers.IO) {
@@ -59,7 +60,7 @@ class CurriculoPaginasRepository(
     }
 
     /**
-     * Arquivo local legível, baixando do Storage quando ainda não está em
+     * Arquivo local legível, buscando no Firestore quando ainda não está em
      * cache. Arquivo de tamanho zero é sobra de um download interrompido e é
      * descartado antes de tentar de novo.
      */
@@ -88,7 +89,7 @@ class CurriculoPaginasRepository(
             val novo = runCatching { anexoRepository.baixarDaNuvem(caminho) }.getOrNull()
                 ?.let(::File)
                 ?.takeIf { it.isFile && it.length() > 0L }
-                ?: return Resultado.Erro("Não consegui baixar este currículo do Storage.")
+                ?: return Resultado.Erro("Não consegui baixar este currículo do banco de dados.")
             runCatching { pastaDoArquivo.deleteRecursively() }
             try {
                 renderizarPaginas(novo, pastaDoArquivo)

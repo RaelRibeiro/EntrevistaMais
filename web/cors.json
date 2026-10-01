@@ -1,8 +1,0 @@
-[
-  {
-    "origin": ["https://entrevista-mais.vercel.app", "http://localhost:3000"],
-    "method": ["GET", "PUT", "POST", "DELETE", "HEAD"],
-    "responseHeader": ["Content-Type", "Content-Length", "ETag"],
-    "maxAgeSeconds": 3600
-  }
-]

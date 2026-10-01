@@ -11,17 +11,11 @@ import {
   orderBy,
   where,
   runTransaction,
+  writeBatch,
   Timestamp,
   type DocumentSnapshot,
 } from 'firebase/firestore';
-import {
-  ref,
-  uploadBytes,
-  getDownloadURL,
-  deleteObject,
-  type StorageReference,
-} from 'firebase/storage';
-import { obterDb, obterStorage } from './firebase';
+import { obterDb } from './firebase';
 import type {
   Entrevista,
   Vaga,
@@ -186,7 +180,33 @@ export async function garantirRoteiroPadrao(uid: string): Promise<void> {
   }
 }
 
-/* ---------------- Currículo (Storage) ---------------- */
+/* ---------------- Currículo (Firestore) ---------------- */
+
+/**
+ * O currículo é gravado no Firestore, e não no Storage do Firebase: o Storage só
+ * é liberado com faturamento ativo no projeto, o que exige cartão de crédito.
+ * Como o uso é de poucos arquivos, guardamos no próprio Firestore, que já está
+ * no nível gratuito.
+ *
+ * O Firestore aceita no máximo 1 MiB por documento, então o arquivo vira base64
+ * (que infla o tamanho em 33%) e é dividido em pedaços gravados como documentos
+ * irmãos em `partes/`. Na leitura os pedaços voltam, são concatenados e
+ * decodificados de volta ao arquivo original.
+ *
+ * O custo: base64 ocupa um terço a mais de espaço, abrir o currículo lê mais de
+ * um documento e a cota do Firestore se esgota mais rápido do que com um storage
+ * de verdade. Em troca, nenhuma configuração de servidor e as regras de
+ * segurança continuam isolando cada usuário na própria pasta.
+ */
+const TAMANHO_MAXIMO = 5 * 1024 * 1024;
+/** 500 mil caracteres de base64 deixam folga larga dentro do limite de 1 MiB. */
+const TAMANHO_PARTE = 500_000;
+/**
+ * Os pedaços são numerados com zeros à esquerda para que a ordem do Firestore
+ * (que é alfabética) coincida com a ordem do arquivo. Assim os pedaços voltam
+ * numa consulta só, em vez de uma leitura por pedaço.
+ */
+const nomeDaParte = (indice: number): string => String(indice).padStart(6, '0');
 
 const caminhoCurriculoDe = (uid: string, arquivo: File): string => {
   const limpo = arquivo.name.replace(/[^\p{L}\p{N}._-]/gu, '_');
@@ -200,28 +220,110 @@ const tipoCurriculoDe = (arquivo: File): TipoCurriculo => {
   return nome.endsWith('.pdf') ? 'PDF' : 'IMAGEM';
 };
 
-/** Envia o arquivo para o Storage e devolve o caminho e o tipo gravados. */
+/** Converte bytes em base64 em pedaços, para não estourar a pilha do navegador. */
+function paraBase64(bytes: Uint8Array): string {
+  const pedacos = 0x8000;
+  let binario = '';
+  for (let i = 0; i < bytes.length; i += pedacos) {
+    binario += String.fromCharCode(
+      ...Array.from(bytes.subarray(i, i + pedacos)),
+    );
+  }
+  return btoa(binario);
+}
+
+function deBase64(texto: string): Uint8Array<ArrayBuffer> {
+  const binario = atob(texto);
+  const bytes = new Uint8Array(new ArrayBuffer(binario.length));
+  for (let i = 0; i < binario.length; i += 1) bytes[i] = binario.charCodeAt(i);
+  return bytes;
+}
+
+const colecaoDeCurriculos = (uid: string, docId: string) =>
+  doc(obterDb(), 'usuarios', uid, 'curriculos', docId);
+
+/** Separa o endereço `usuarios/{uid}/curriculos/{docId}.{ext}` nas suas partes. */
+function partesDoCaminho(caminho: string): { uid: string; docId: string } | null {
+  const pedacos = caminho.split('/');
+  if (pedacos.length < 4 || pedacos[0] !== 'usuarios') return null;
+  return { uid: pedacos[1], docId: pedacos[3].replace(/\.[^.]+$/, '') };
+}
+
+/** Envia o arquivo para o Firestore e devolve o caminho e o tipo gravados. */
 export async function anexarCurriculo(
   uid: string,
   arquivo: File,
 ): Promise<{ caminhoCurriculo: string; tipoCurriculo: TipoCurriculo }> {
   const caminho = caminhoCurriculoDe(uid, arquivo);
-  const referencia: StorageReference = ref(obterStorage(), caminho);
-  await uploadBytes(referencia, arquivo);
+  const { docId } = partesDoCaminho(caminho)!;
+  const bytes = new Uint8Array(await arquivo.arrayBuffer());
+  if (bytes.length > TAMANHO_MAXIMO) {
+    throw new Error(
+      `Currículo maior que ${TAMANHO_MAXIMO / (1024 * 1024)} MB.`,
+    );
+  }
+
+  const texto = paraBase64(bytes);
+  const total = texto.length;
+  const quantidade = total === 0 ? 1 : Math.ceil(total / TAMANHO_PARTE);
+
+  // Um lote só: ou o currículo inteiro vai para o Firestore, ou nada dele fica
+  // pela metade (um currículo pela metade não serve para nada).
+  const documento = colecaoDeCurriculos(uid, docId);
+  const lote = writeBatch(obterDb());
+  lote.set(documento, {
+    id: Date.now(),
+    nome: arquivo.name,
+    ext: arquivo.name.match(/\.[^.]+$/)?.[0]?.toLowerCase() ?? '',
+    partes: quantidade,
+    bytes: bytes.length,
+  });
+  for (let indice = 0; indice < quantidade; indice += 1) {
+    lote.set(doc(documento, 'partes', nomeDaParte(indice)), {
+      dados: texto.slice(indice * TAMANHO_PARTE, (indice + 1) * TAMANHO_PARTE),
+    });
+  }
+  await lote.commit();
+
   return { caminhoCurriculo: caminho, tipoCurriculo: tipoCurriculoDe(arquivo) };
 }
 
-/** URL pública de download de um arquivo já gravado no Storage. */
+/**
+ * Monta o arquivo a partir dos pedaços guardados e devolve uma URL temporária
+ * para abrir no navegador. Quem chamou é responsável por revogar a URL.
+ */
 export async function urlDoCurriculo(caminho: string): Promise<string> {
-  return getDownloadURL(ref(obterStorage(), caminho));
+  const partes = partesDoCaminho(caminho);
+  if (!partes) throw new Error('Endereço de currículo inválido.');
+
+  const referencia = colecaoDeCurriculos(partes.uid, partes.docId);
+  const documento = await getDoc(referencia);
+  if (!documento.exists()) throw new Error('Currículo não encontrado.');
+
+  const peca = await getDocs(query(collection(referencia, 'partes')));
+  const texto = peca.docs.map((item) => String(item.data().dados ?? '')).join('');
+
+  const dados = documento.data();
+  const nome = String(dados?.nome ?? partes.docId);
+  const ext = String(dados?.ext ?? '').replace(/^\./, '');
+  const tipo = ext === 'pdf' ? 'application/pdf' : `image/${ext || 'jpeg'}`;
+  return URL.createObjectURL(new Blob([deBase64(texto)], { type: tipo }));
 }
 
-/** Apaga o arquivo do Storage (usado ao remover o candidato ou trocar o anexo). */
+/** Apaga o currículo (usado ao remover o candidato ou trocar o anexo). */
 export async function apagarCurriculoArquivo(caminho: string): Promise<void> {
   try {
-    await deleteObject(ref(obterStorage(), caminho));
+    const partes = partesDoCaminho(caminho);
+    if (!partes) return;
+    const referencia = colecaoDeCurriculos(partes.uid, partes.docId);
+
+    const peca = await getDocs(query(collection(referencia, 'partes')));
+    const lote = writeBatch(obterDb());
+    for (const item of peca.docs) lote.delete(item.ref);
+    lote.delete(referencia);
+    await lote.commit();
   } catch {
-    // Se a regra/arquivo não existir, o dado Firestore continua valendo.
+    // Se o documento não existir, o dado da entrevista continua valendo.
   }
 }
 

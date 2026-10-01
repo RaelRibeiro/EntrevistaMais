@@ -184,8 +184,8 @@ class AgendaViewModel(
             }
             when (val resultado = anexoRepository.copiar(uri)) {
                 is AnexoRepository.Resultado.Sucesso -> {
-                    // Guarda o endereço no Storage: é ele que viaja no Firestore
-                    // para o currículo abrir em qualquer aparelho (e no site).
+                    // Guarda o endereço no Firestore: é ele que viaja com a
+                    // entrevista para o currículo abrir em qualquer aparelho (e no site).
                     val caminho = runCatching {
                         anexoRepository.enviarParaNuvem(resultado.caminho, resultado.nomeOriginal)
                     }.getOrDefault(resultado.caminho)

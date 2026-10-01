@@ -47,7 +47,7 @@ interface AppContainer {
  *  - login e sessão via [FirebaseAuth];
  *  - dados (entrevistas, vagas, roteiros, respostas) no Firestore
  *    em `usuarios/{uid}`;
- *  - currículos anexados no Firebase Storage.
+ *  - currículos anexados no Firestore.
  *
  * As interfaces `@Dao` continuam sendo o contrato dos repositórios — a troca de
  * Room para Firestore acontece só aqui, e os testes com fakes seguem intactos.
@@ -95,7 +95,7 @@ class DefaultAppContainer(context: Context) : AppContainer {
         val auth = Firebase.auth(appContext)
         AnexoRepository(
             context = appContext,
-            storage = Firebase.storage(appContext),
+            firestore = Firebase.firestore(appContext),
             uid = { auth.currentUser?.uid ?: "" },
         )
     }
