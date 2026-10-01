@@ -37,12 +37,18 @@ mesma estrutura:
 usuarios/{uid}
   ├── definicoes/padrao            (horário de início, almoço, duração…)
   ├── vagas/{vagaId}
-  ├── entrevistas/{entrevistaId}
-  ├── roteiros/{roteiroId}
-  │     └── perguntas/{perguntaId}
-  ├── respostas/{entrevistaId}     (um documento com {perguntaId: valor})
-  └── experiencias/{entrevistaId}  (tabela de experiências profissionais)
+   ├── entrevistas/{entrevistaId}
+   ├── roteiros/{roteiroId}
+   ├── perguntas/{perguntaId}        (campo roteiroId ligando ao roteiro)
+   ├── respostas/{entrevistaId-perguntaId}  (um documento por resposta)
+   └── experiencias/{id}       (campo entrevistaId)
 ```
+
+O identificador é **numérico**: o documento tem id = `"1704067200000000"` e o
+campo `id` é gravado como número. É o que o aplicativo Android lê
+(`getLong("id")`) — documento sem esse campo é ignorado por ele, então tudo o
+que o site grava precisa ter o `id` numérico. Por isso nada de `addDoc`
+(id automático): o site escolhe o número e grava em `setDoc`.
 
 Currículos anexados vão para o **Storage** em
 `usuarios/{uid}/curriculos/{timestamp}_{nome}.{ext}`. As regras de segurança
@@ -65,7 +71,18 @@ são `firestore.rules` (Firestore) e `storage.rules` (Storage), ambas na pasta
 5. No menu **Build → Storage**, clique em **Começar** (região padrão já usada)
    e publique as regras do arquivo `storage.rules` da pasta `web/` na aba
    **Regras**. Sem isto, anexar currículo falha.
-6. Em **Configurações do projeto → Seus apps**, adicione um app **Web** (ícone
+6. **CORS do bucket** (obrigatório para o site, opcional para o app): o
+   navegador é bloqueado pelo bucket ao enviar/baixar currículo. Com o
+   [Google Cloud CLI](https://cloud.google.com/sdk/docs/install) instalado e
+   autenticado (`gcloud auth login`, `gcloud config set project entrevistamais-a25e1`):
+
+   ```bash
+   gcloud storage buckets update gs://entrevistamais-a25e1.firebasestorage.app --cors-file=web/cors.json
+   ```
+
+   Sem isso o anexo dá erro de CORS; o candidato continua sendo cadastrado
+   (sem arquivo) e um aviso aparece na tela.
+7. Em **Configurações do projeto → Seus apps**, adicione um app **Web** (ícone
    `</>`), copie a configuração e preencha o arquivo `web/.env.local` (use o
    `.env.local.example` como modelo).
 
