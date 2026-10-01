@@ -108,7 +108,7 @@ export type TipoCurriculo = (typeof TipoCurriculo)[keyof typeof TipoCurriculo];
 
 export interface Pergunta {
   id: string;
-  roteiroId: string;
+  roteiroId: number;
   titulo: string;
   tipo: TipoResposta;
   ordem: number;
@@ -122,8 +122,8 @@ export interface Roteiro {
   conteudo: string;
   ordem: number;
   padrao: boolean;
-  /** Vazio no roteiro padrão do processo; preenchido no roteiro de uma vaga. */
-  vagaId: string | null;
+  /** Nulo no roteiro padrão do processo; preenchido no roteiro de uma vaga. */
+  vagaId: number | null;
 }
 
 export interface Entrevista {
@@ -135,7 +135,7 @@ export interface Entrevista {
   duracaoMinutos: number;
   status: StatusEntrevista;
   ordem: number;
-  vagaId: string | null;
+  vagaId: number | null;
   inicioManual: boolean;
   curriculo: string;
   tipoCurriculo: TipoCurriculo;
@@ -167,7 +167,8 @@ export interface Vaga {
 
 /** Exibe o horário de trabalho da vaga, dos campos do app ou do texto antigo. */
 export function horarioDaVaga(vaga: Pick<Vaga, 'horarioTrabalho' | 'entradaMinutos' | 'saidaMinutos'>): string {
-  if (Number.isFinite(vaga.entradaMinutos) && Number.isFinite(vaga.saidaMinutos)) {
+  const preenchido = (m: number) => Number.isFinite(m) && m >= 0;
+  if (preenchido(vaga.entradaMinutos) && preenchido(vaga.saidaMinutos)) {
     const h = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
     return `${h(vaga.entradaMinutos)} às ${h(vaga.saidaMinutos)}`;
   }
@@ -176,7 +177,7 @@ export function horarioDaVaga(vaga: Pick<Vaga, 'horarioTrabalho' | 'entradaMinut
 
 export interface LinhaExperiencia {
   id: string;
-  entrevistaId: string;
+  entrevistaId: number;
   local: string;
   ano: string;
   duracao: string;

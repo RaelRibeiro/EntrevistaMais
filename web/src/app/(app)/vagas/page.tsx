@@ -18,8 +18,8 @@ const VAZIA: Omit<Vaga, 'id' | 'criadoEm'> = {
   empresa: '',
   tipoContrato: '',
   horarioTrabalho: '',
-  entradaMinutos: NaN,
-  saidaMinutos: NaN,
+  entradaMinutos: -1,
+  saidaMinutos: -1,
   salarioBeneficios: '',
   tempoExperiencia: '',
   escolaridade: '',
@@ -81,34 +81,25 @@ export default function PaginaVagas() {
       setAviso('Informe o título da vaga.');
       return;
     }
-    const corpo = {
+    const normalizaHora = (m: number) => (Number.isFinite(m) && m >= 0 ? m : -1);
+    const final = {
       titulo: formulario.titulo.trim(),
       empresa: formulario.empresa.trim(),
       tipoContrato: formulario.tipoContrato,
       horarioTrabalho: formulario.horarioTrabalho.trim(),
-      entradaMinutos: Number.isFinite(formulario.entradaMinutos)
-        ? formulario.entradaMinutos
-        : NaN,
-      saidaMinutos: Number.isFinite(formulario.saidaMinutos)
-        ? formulario.saidaMinutos
-        : NaN,
+      entradaMinutos: normalizaHora(formulario.entradaMinutos),
+      saidaMinutos: normalizaHora(formulario.saidaMinutos),
       salarioBeneficios: formulario.salarioBeneficios.trim(),
       tempoExperiencia: formulario.tempoExperiencia.trim(),
       escolaridade: formulario.escolaridade,
       exigeHabilitacao: formulario.exigeHabilitacao,
       resumoAtividades: formulario.resumoAtividades.trim(),
       limiteCandidatos: formulario.limiteCandidatos || 0,
-    };
-    // Firestore não aceita NaN: horário vazio vira ausência de campo.
-    const final = { ...corpo } as Record<string, unknown>;
-    if (!Number.isFinite(final.entradaMinutos)) {
-      delete final.entradaMinutos;
-      delete final.saidaMinutos;
-    }
+    } as Omit<Vaga, 'id' | 'criadoEm'>;
     if (formulario.id) {
-      await atualizarVaga(uid, formulario.id, final as Omit<Vaga, 'id' | 'criadoEm'>);
+      await atualizarVaga(uid, formulario.id, final);
     } else {
-      await criarVaga(uid, final as Omit<Vaga, 'id' | 'criadoEm'>);
+      await criarVaga(uid, final);
     }
     setFormulario(null);
     setAviso('');
@@ -198,7 +189,9 @@ function Seletor({
         value={valor}
         onChange={(e) => aoEscolher(e.target.value)}
       >
-        <option value="">Selecione</option>
+        <option value="" disabled>
+          Selecione
+        </option>
         {opcoes.map((opcao) => (
           <option key={opcao} value={opcao}>
             {opcao}
@@ -234,7 +227,7 @@ function FormularioVaga({
   });
 
   const horaDe = (minutos: number) =>
-    Number.isFinite(minutos) || (minutos as unknown) !== '' ? minutosParaHora(minutos) : '';
+    Number.isFinite(minutos) && minutos >= 0 ? minutosParaHora(minutos) : '';
 
   const definirHora = (chave: 'entradaMinutos' | 'saidaMinutos', valor: string) =>
     aoAlterar({

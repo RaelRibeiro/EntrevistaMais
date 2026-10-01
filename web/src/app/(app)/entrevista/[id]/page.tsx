@@ -70,7 +70,7 @@ export default function PaginaEntrevista({ params }: Props) {
 
   if (!entrevista) return <p className="dica">Carregando entrevista…</p>;
 
-  const vaga = vagas.find((v) => v.id === entrevista.vagaId);
+  const vaga = vagas.find((v) => Number(v.id) === entrevista.vagaId);
   const finalizada = ehFinalizado(entrevista.status);
   const emAndamento = entrevista.status === 'EM_ANDAMENTO';
 
@@ -223,22 +223,34 @@ function BlocoCurriculo({
 }) {
   const temArquivo = Boolean(e.caminhoCurriculo);
   const [arquivo, setArquivo] = useState<File | null>(null);
+  const [erroAnexo, setErroAnexo] = useState('');
 
   const abrirCurriculo = async () => {
     if (!e.caminhoCurriculo) return;
-    const url = await urlDoCurriculo(e.caminhoCurriculo);
-    window.open(url, '_blank');
+    try {
+      const url = await urlDoCurriculo(e.caminhoCurriculo);
+      window.open(url, '_blank');
+    } catch {
+      setErroAnexo('Não consegui gerar o link do currículo (Storage).');
+    }
   };
 
   const trocarArquivo = async (novo: File | null) => {
     if (!novo || !uid) return;
-    const anexo = await anexarCurriculo(uid, novo);
-    if (e.caminhoCurriculo) void apagarCurriculoArquivo(e.caminhoCurriculo);
-    await atualizarEntrevista(uid, e.id, {
-      caminhoCurriculo: anexo.caminhoCurriculo,
-      tipoCurriculo: anexo.tipoCurriculo,
-      nomeArquivoCurriculo: novo.name,
-    });
+    try {
+      const anexo = await anexarCurriculo(uid, novo);
+      if (e.caminhoCurriculo) void apagarCurriculoArquivo(e.caminhoCurriculo);
+      await atualizarEntrevista(uid, e.id, {
+        caminhoCurriculo: anexo.caminhoCurriculo,
+        tipoCurriculo: anexo.tipoCurriculo,
+        nomeArquivoCurriculo: novo.name,
+      });
+      setErroAnexo('');
+    } catch {
+      setErroAnexo(
+        'Não consegui enviar o currículo (Storage). Verifique as regras do bucket e o CORS.',
+      );
+    }
   };
 
   const removerArquivo = async () => {
@@ -284,6 +296,11 @@ function BlocoCurriculo({
             }}
           />
         </label>
+      )}
+      {erroAnexo && (
+        <p className="dica" style={{ color: 'var(--erro, #c0392b)' }}>
+          {erroAnexo}
+        </p>
       )}
       <textarea
         className="campo"

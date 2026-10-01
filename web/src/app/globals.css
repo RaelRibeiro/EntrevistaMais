@@ -84,8 +84,8 @@ a {
   background: var(--superficie);
   border: 1px solid var(--borda);
   border-radius: var(--radius);
-  padding: 16px;
-  margin-bottom: 14px;
+  padding: 20px;
+  margin-bottom: 18px;
 }
 
 .titulo {
@@ -113,9 +113,9 @@ a {
 .candidato {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
   border-bottom: 1px solid var(--borda);
-  padding: 12px 2px;
+  padding: 16px 4px;
 }
 
 .candidato:last-of-type {
@@ -232,11 +232,11 @@ a {
   width: 100%;
   border: 1px solid var(--borda);
   border-radius: 10px;
-  padding: 10px 12px;
+  padding: 12px 14px;
   font-size: 15px;
   font-family: inherit;
   background: var(--superficie);
-  margin-bottom: 12px;
+  margin-bottom: 16px;
 }
 
 .campo:focus {
@@ -257,12 +257,12 @@ label.campo.arquivo {
 .fieldset {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 12px;
+  gap: 10px;
+  margin-bottom: 18px;
 }
 
 .fieldset span {
-  padding: 8px 14px;
+  padding: 9px 16px;
   border-radius: 999px;
   border: 1px solid var(--borda);
   font-size: 14px;
@@ -277,9 +277,18 @@ label.campo.arquivo {
 
 .acoes {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   flex-wrap: wrap;
-  margin-top: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--borda);
+}
+
+/* Na linha do candidato os botões ficam à direita, sem separador. */
+.candidato .acoes {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
 }
 
 .erro {

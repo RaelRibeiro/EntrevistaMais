@@ -86,7 +86,7 @@ export default function PaginaRoteiro() {
       </div>
 
       {vagas.map((vaga) => {
-        const roteiroDaVaga = porVaga.find((r) => r.vagaId === vaga.id);
+        const roteiroDaVaga = porVaga.find((r) => r.vagaId === Number(vaga.id));
         return (
           <div className="cartao" key={vaga.id}>
             <strong>Roteiro da vaga — {vaga.titulo}</strong>
@@ -194,7 +194,7 @@ function EditorRoteiro({
         conteudo: '',
         ordem: vagaId ? 1 : 0,
         padrao: !vagaId,
-        vagaId,
+        vagaId: vagaId ? Number(vagaId) : null,
       },
       lista.filter((p) => p.titulo.trim()),
       roteiroId ?? undefined,

@@ -1,7 +1,6 @@
 import {
   collection,
   doc,
-  addDoc,
   setDoc,
   updateDoc,
   deleteDoc,
@@ -10,6 +9,7 @@ import {
   onSnapshot,
   query,
   orderBy,
+  where,
   runTransaction,
   Timestamp,
   type DocumentSnapshot,
@@ -35,28 +35,41 @@ import { numero } from './horario';
 import { calcularHorarios } from './agenda';
 
 /**
- * Acesso ao Firestore.
+ * Acesso ao Firestore — mesmo esquema que o aplicativo Android usa.
  *
- * Estrutura: toda informação fica em um subconjunto do usuário (UID), então
- * duas contas nunca se enxergam:
- *   usuarios/{uid}/definicoes -> documento único
- *   usuarios/{uid}/vagas/*        -> uma vaga por documento
- *   usuarios/{uid}/entrevistas/*  -> uma entrevista por documento
- *   usuarios/{uid}/roteiros/*     -> roteiro padrão + um por vaga
- *   usuarios/{uid}/perguntas/*    -> perguntas de um roteiro
+ * Toda informação vive em um subconjunto do usuário (UID) e os identificadores
+ * são numéricos: o documento tem id = `"12345"` e guarda o campo `id` como
+ * número. O app faz `getLong("id")` e ignora documentos sem esse campo, então
+ * tudo o que for escrito aqui precisa ter o `id` numérico gravado.
  *
- * É esta a forma que o aplicativo Android vai usar quando ligar o Firebase,
- * então o login e os dados ficam iguais no app e no site.
+ *   usuarios/{uid}/definicoes/padrao
+ *   usuarios/{uid}/vagas/{id}
+ *   usuarios/{uid}/entrevistas/{id}
+ *   usuarios/{uid}/roteiros/{id}
+ *   usuarios/{uid}/perguntas/{id}       -> campo roteiroId
+ *   usuarios/{uid}/respostas/{ent-Id-perguntaId}  -> campo entrevistaId
+ *   usuarios/{uid}/experiencias/{id}    -> campo entrevistaId
  */
+
+const LONGO_EPOCA = 1704067200000;
+
+/**
+ * Mesmo gerador do app, mas mantendo o valor dentro de 2^53 (seguro para o
+ * número do JavaScript). O app usa `(millis shl 20)` que passa do limite — aqui
+ * usamos o mesmo deslocamento que o app passará a usar após o ajuste.
+ */
+function novoId(): number {
+  return ((Date.now() - LONGO_EPOCA) * 4096 + Math.floor(Math.random() * 4096)) %
+    Number.MAX_SAFE_INTEGER;
+}
 
 const colecoes = (uid: string) => ({
   vagas: collection(obterDb(), 'usuarios', uid, 'vagas'),
   entrevistas: collection(obterDb(), 'usuarios', uid, 'entrevistas'),
   roteiros: collection(obterDb(), 'usuarios', uid, 'roteiros'),
-  perguntas: (roteiroId: string) =>
-    collection(obterDb(), 'usuarios', uid, 'roteiros', roteiroId, 'perguntas'),
-  experiencias: (entrevistaId: string) =>
-    collection(obterDb(), 'usuarios', uid, 'entrevistas', entrevistaId, 'experiencias'),
+  perguntas: collection(obterDb(), 'usuarios', uid, 'perguntas'),
+  respostas: collection(obterDb(), 'usuarios', uid, 'respostas'),
+  experiencias: collection(obterDb(), 'usuarios', uid, 'experiencias'),
 });
 
 const documentos = (uid: string) => ({
@@ -66,13 +79,15 @@ const documentos = (uid: string) => ({
   roteiro: (id: string) => doc(obterDb(), 'usuarios', uid, 'roteiros', id),
 });
 
-/** As respostas ficam em um documento único por entrevista: {perguntaId: valor}. */
-const respostasDoc = (uid: string, entrevistaId: string) =>
-  doc(obterDb(), 'usuarios', uid, 'respostas', entrevistaId);
+/** Id igual ao do app: `entrevistaId-perguntaId` (string dos números). */
+const idDeResposta = (entrevistaId: number, perguntaId: number): string =>
+  `${entrevistaId}-${perguntaId}`;
 
+// O `id` é sempre o id do documento (string). Dados do app também trazem um
+// campo `id` numérico; ele NÃO pode sobrescrever o id que usamos para navegar.
 const lerDocumento = <T>(snap: DocumentSnapshot, padrao: Partial<T>): T => {
   const dados = snap.data();
-  return { ...padrao, id: snap.id, ...dados } as T;
+  return { ...padrao, ...dados, id: snap.id } as T;
 };
 
 /* ---------------- Definições ---------------- */
@@ -120,23 +135,53 @@ export const ROTEIRO_PADRAO_INICIAL = [
 ] as const;
 
 /**
- * Cria o roteiro padrão (com as perguntas acima) na primeira vez em que o
- * usuário entra — igual ao aplicativo. Não faz nada se já existir um.
+ * Cria (ou conserta) o roteiro padrão com as perguntas acima — igual ao app.
+ * Se o roteiro padrão antigo (sem campo `id` numérico) existir, ele ganha um
+ * id numérico e as perguntas passam a ser gravadas na coleção plana do app.
  */
 export async function garantirRoteiroPadrao(uid: string): Promise<void> {
-  const consulta = await getDocs(query(colecoes(uid).roteiros));
-  if (consulta.docs.some((d) => d.data().padrao === true)) return;
-  const roteiroRef = await addDoc(colecoes(uid).roteiros, {
-    titulo: 'Roteiro de Entrevista',
-    conteudo: 'Roteiro de entrevista padrão',
-    ordem: 0,
-    padrao: true,
-    vagaId: null,
-  });
+  const docs = await getDocs(query(colecoes(uid).roteiros, where('padrao', '==', true)));
+  const confiavel = docs.docs.find((d) => typeof d.data().id === 'number');
+  if (confiavel) return;
+
+  let roteiroId: number;
+  const antigo = docs.docs[0];
+  if (antigo) {
+    roteiroId = novoId();
+    await setDoc(documentos(uid).roteiro(String(roteiroId)), {
+      ...antigo.data(),
+      id: roteiroId,
+      vagaId: null,
+    });
+    await deleteDoc(antigo.ref);
+  } else {
+    roteiroId = novoId();
+    await setDoc(documentos(uid).roteiro(String(roteiroId)), {
+      titulo: 'Roteiro de Entrevista',
+      conteudo: 'Roteiro de entrevista padrão',
+      ordem: 0,
+      padrao: true,
+      vagaId: null,
+      id: roteiroId,
+    });
+  }
+
+  const existentes = await getDocs(
+    query(colecoes(uid).perguntas, where('roteiroId', '==', roteiroId)),
+  );
+  for (const antiga of existentes.docs) await deleteDoc(antiga.ref);
+
   for (const [indice, pergunta] of ROTEIRO_PADRAO_INICIAL.entries()) {
-    await setDoc(doc(colecoes(uid).perguntas(roteiroRef.id)), {
-      ...pergunta,
+    const id = novoId();
+    await setDoc(doc(colecoes(uid).perguntas, String(id)), {
+      id,
+      roteiroId,
+      titulo: pergunta.titulo,
+      tipo: pergunta.tipo,
       ordem: indice,
+      dica: pergunta.dica,
+      respostaAutomatica: pergunta.respostaAutomatica,
+      obrigatoria: false,
     });
   }
 }
@@ -228,8 +273,8 @@ function vagaDoDocumento(snap: DocumentSnapshot): Vaga {
     empresa: '',
     tipoContrato: '',
     horarioTrabalho: '',
-    entradaMinutos: NaN,
-    saidaMinutos: NaN,
+    entradaMinutos: -1,
+    saidaMinutos: -1,
     salarioBeneficios: '',
     tempoExperiencia: '',
     escolaridade: '',
@@ -241,22 +286,26 @@ function vagaDoDocumento(snap: DocumentSnapshot): Vaga {
 }
 
 export function observarVagas(uid: string, aoAtualizar: (vagas: Vaga[]) => void): () => void {
+  // orderBy('criadoEm') esconderia vagas criadas no app (sem esse campo).
   return onSnapshot(
-    query(colecoes(uid).vagas, orderBy('criadoEm', 'asc')),
+    query(colecoes(uid).vagas, orderBy('titulo', 'asc')),
     (snap) => aoAtualizar(snap.docs.map(vagaDoDocumento)),
   );
 }
 
 export async function criarVaga(uid: string, vaga: Omit<Vaga, 'id' | 'criadoEm'>): Promise<string> {
-  const ref = await addDoc(colecoes(uid).vagas, {
+  const id = novoId();
+  await setDoc(documentos(uid).vaga(String(id)), {
     ...vaga,
+    id,
+    ativa: true,
     criadoEm: Timestamp.now(),
   });
-  return ref.id;
+  return String(id);
 }
 
 export async function atualizarVaga(uid: string, id: string, vaga: Omit<Vaga, 'id' | 'criadoEm'>): Promise<void> {
-  await setDoc(documentos(uid).vaga(id), vaga, { merge: true });
+  await setDoc(documentos(uid).vaga(id), { ...vaga, id: Number(id) }, { merge: true });
 }
 
 export async function removerVaga(uid: string, id: string): Promise<void> {
@@ -269,7 +318,10 @@ export async function contarCandidatos(uid: string): Promise<Record<string, numb
   const mapa: Record<string, number> = {};
   consulta.docs.forEach((snap) => {
     const vagaId = snap.data().vagaId;
-    if (vagaId) mapa[vagaId] = (mapa[vagaId] ?? 0) + 1;
+    if (typeof vagaId === 'number') {
+      const chave = String(vagaId);
+      mapa[chave] = (mapa[chave] ?? 0) + 1;
+    }
   });
   return mapa;
 }
@@ -317,7 +369,7 @@ export async function adicionarEntrevista(
     caminhoCurriculo?: string;
     nomeArquivoCurriculo?: string;
   },
-): Promise<void> {
+): Promise<string> {
   const definicoes = await lerDefinicoes(uid);
   const consulta = await getDocs(colecoes(uid).entrevistas);
 
@@ -343,8 +395,11 @@ export async function adicionarEntrevista(
   );
 
   const inicio = calculado.find((c) => c.candidato.id === 'novo');
-  await addDoc(colecoes(uid).entrevistas, {
+  const id = novoId();
+  await setDoc(documentos(uid).entrevista(String(id)), {
+    id,
     ...dados,
+    vagaId: dados.vagaId ?? null,
     duracaoMinutos: inicio?.duracaoMinutos ?? dados.duracaoMinutos,
     inicioMinutos: inicio?.inicioMinutos ?? 0,
     ordem: lista.length,
@@ -356,6 +411,7 @@ export async function adicionarEntrevista(
     nomeArquivoCurriculo: dados.nomeArquivoCurriculo ?? '',
     criadoEm: Timestamp.now(),
   });
+  return String(id);
 }
 
 /** Atualiza campos pontuais de uma entrevista (currículo, status, horários…). */
@@ -442,10 +498,17 @@ export async function removerEntrevista(uid: string, id: string): Promise<void> 
   const caminho = dados?.caminhoCurriculo as string | undefined;
   if (caminho) void apagarCurriculoArquivo(caminho);
 
-  const experiencias = await getDocs(colecoes(uid).experiencias(id));
+  const entrevistaId = Number(id);
+  const respostas = await getDocs(
+    query(colecoes(uid).respostas, where('entrevistaId', '==', entrevistaId)),
+  );
+  for (const resposta of respostas.docs) await deleteDoc(resposta.ref);
+
+  const experiencias = await getDocs(
+    query(colecoes(uid).experiencias, where('entrevistaId', '==', entrevistaId)),
+  );
   for (const linha of experiencias.docs) await deleteDoc(linha.ref);
 
-  await deleteDoc(respostasDoc(uid, id));
   await deleteDoc(documentos(uid).entrevista(id));
 }
 
@@ -499,10 +562,10 @@ export function observarPerguntas(
   aoAtualizar: (perguntas: Pergunta[]) => void,
 ): () => void {
   return onSnapshot(
-    query(colecoes(uid).perguntas(roteiroId), orderBy('ordem', 'asc')),
+    query(colecoes(uid).perguntas, where('roteiroId', '==', Number(roteiroId))),
     (snap) => aoAtualizar(snap.docs.map((doc) => lerDocumento<Pergunta>(doc, {
-      id: '', roteiroId, titulo: '', tipo: 'TEXTO', ordem: 0, dica: '', respostaAutomatica: 'NENHUMA',
-    }))),
+      id: '', roteiroId: Number(roteiroId), titulo: '', tipo: 'TEXTO', ordem: 0, dica: '', respostaAutomatica: 'NENHUMA',
+    })).sort((a, b) => a.ordem - b.ordem)),
   );
 }
 
@@ -512,26 +575,40 @@ export async function salvarRoteiro(
   perguntas: Omit<Pergunta, 'id' | 'roteiroId' | 'ordem'>[],
   id?: string,
 ): Promise<string> {
-  // Criação ou atualização do documento do roteiro.
-  const roteiroId = id ?? (await addDoc(colecoes(uid).roteiros, roteiro)).id;
-  await setDoc(documentos(uid).roteiro(roteiroId), roteiro);
+  const roteiroId = id ? Number(id) : novoId();
+  const docId = id ?? String(roteiroId);
+  await setDoc(documentos(uid).roteiro(docId), {
+    ...roteiro,
+    id: roteiroId,
+    vagaId: roteiro.vagaId ?? null,
+  });
 
-  // Apaga as perguntas antigas e reescreve na ordem atual.
-  const existentes = await getDocs(colecoes(uid).perguntas(roteiroId));
-  for (const antiga of existentes.docs) {
-    await deleteDoc(antiga.ref);
-  }
+  // Apaga as perguntas antigas deste roteiro e reescreve na ordem atual.
+  const existentes = await getDocs(
+    query(colecoes(uid).perguntas, where('roteiroId', '==', roteiroId)),
+  );
+  for (const antiga of existentes.docs) await deleteDoc(antiga.ref);
+
   for (const [indice, pergunta] of perguntas.entries()) {
-    await setDoc(doc(colecoes(uid).perguntas(roteiroId)), {
-      ...pergunta,
+    const idPergunta = novoId();
+    await setDoc(doc(colecoes(uid).perguntas, String(idPergunta)), {
+      id: idPergunta,
+      roteiroId,
+      titulo: pergunta.titulo,
+      tipo: pergunta.tipo,
+      dica: pergunta.dica,
+      respostaAutomatica: pergunta.respostaAutomatica,
       ordem: indice,
+      obrigatoria: false,
     });
   }
-  return roteiroId;
+  return docId;
 }
 
 export async function apagarRoteiro(uid: string, id: string): Promise<void> {
-  const perguntas = await getDocs(colecoes(uid).perguntas(id));
+  const perguntas = await getDocs(
+    query(colecoes(uid).perguntas, where('roteiroId', '==', Number(id))),
+  );
   for (const pergunta of perguntas.docs) await deleteDoc(pergunta.ref);
   await deleteDoc(documentos(uid).roteiro(id));
 }
@@ -541,18 +618,22 @@ export function observarRespostas(
   entrevistaId: string,
   aoAtualizar: (respostas: Record<string, string>) => void,
 ): () => void {
-  // Um documento por entrevista com `{perguntaId: valor}`. Ler de uma vez é
-  // mais barato que um alerta por pergunta.
-  return onSnapshot(respostasDoc(uid, entrevistaId), (snap) => {
-    const dados = snap.data();
-    const mapa: Record<string, string> = {};
-    if (dados) {
-      for (const [perguntaId, valor] of Object.entries(dados)) {
-        if (typeof valor === 'string') mapa[perguntaId] = valor;
+  // Uma linha por campo no app: coleção plana com documentos `ent-perguntaId`.
+  return onSnapshot(
+    query(colecoes(uid).respostas, where('entrevistaId', '==', Number(entrevistaId))),
+    (snap) => {
+      const mapa: Record<string, string> = {};
+      for (const doc of snap.docs) {
+        const dados = doc.data();
+        const perguntaId = dados.perguntaId;
+        const texto = dados.texto;
+        if (typeof perguntaId === 'number' && typeof texto === 'string') {
+          mapa[String(perguntaId)] = texto;
+        }
       }
-    }
-    aoAtualizar(mapa);
-  });
+      aoAtualizar(mapa);
+    },
+  );
 }
 
 export async function salvarResposta(
@@ -561,7 +642,13 @@ export async function salvarResposta(
   perguntaId: string,
   valor: string,
 ): Promise<void> {
-  await setDoc(respostasDoc(uid, entrevistaId), { [perguntaId]: valor }, { merge: true });
+  const nEntrevista = Number(entrevistaId);
+  const nPergunta = Number(perguntaId);
+  await setDoc(doc(colecoes(uid).respostas, idDeResposta(nEntrevista, nPergunta)), {
+    entrevistaId: nEntrevista,
+    perguntaId: nPergunta,
+    texto: valor,
+  });
 }
 
 export async function salvarExperiencia(
@@ -569,7 +656,12 @@ export async function salvarExperiencia(
   entrevistaId: string,
   linha: Omit<LinhaExperiencia, 'id' | 'entrevistaId'>,
 ): Promise<void> {
-  await addDoc(colecoes(uid).experiencias(entrevistaId), linha);
+  const id = novoId();
+  await setDoc(doc(colecoes(uid).experiencias, String(id)), {
+    id,
+    entrevistaId: Number(entrevistaId),
+    ...linha,
+  });
 }
 
 export function observarExperiencias(
@@ -578,21 +670,23 @@ export function observarExperiencias(
   aoAtualizar: (linhas: LinhaExperiencia[]) => void,
 ): () => void {
   return onSnapshot(
-    query(colecoes(uid).experiencias(entrevistaId), orderBy('ordem', 'asc')),
+    query(colecoes(uid).experiencias, where('entrevistaId', '==', Number(entrevistaId))),
     (snap) =>
       aoAtualizar(
-        snap.docs.map((doc) =>
-          lerDocumento<LinhaExperiencia>(doc, {
-            id: '',
-            entrevistaId,
-            local: '',
-            ano: '',
-            duracao: '',
-            cargo: '',
-            motivoSaida: '',
-            ordem: 0,
-          }),
-        ),
+        snap.docs
+          .map((doc) =>
+            lerDocumento<LinhaExperiencia>(doc, {
+              id: '',
+              entrevistaId: Number(entrevistaId),
+              local: '',
+              ano: '',
+              duracao: '',
+              cargo: '',
+              motivoSaida: '',
+              ordem: 0,
+            }),
+          )
+          .sort((a, b) => a.ordem - b.ordem),
       ),
   );
 }
@@ -603,7 +697,7 @@ export async function atualizarExperiencia(
   id: string,
   campos: Partial<Omit<LinhaExperiencia, 'id' | 'entrevistaId'>>,
 ): Promise<void> {
-  await updateDoc(doc(colecoes(uid).experiencias(entrevistaId), id), campos);
+  await updateDoc(doc(colecoes(uid).experiencias, id), campos);
 }
 
 export async function removerExperiencia(
@@ -611,5 +705,5 @@ export async function removerExperiencia(
   entrevistaId: string,
   id: string,
 ): Promise<void> {
-  await deleteDoc(doc(colecoes(uid).experiencias(entrevistaId), id));
+  await deleteDoc(doc(colecoes(uid).experiencias, id));
 }

@@ -14,7 +14,7 @@ import {
   recalcularHorariosDoDia,
   observarVagas,
 } from '@/lib/firestore';
-import type { Entrevista, StatusEntrevista, Vaga } from '@/lib/tipos';
+import type { Entrevista, StatusEntrevista, TipoCurriculo, Vaga } from '@/lib/tipos';
 import { hojeIso, minutosParaHora, horaParaMinutos } from '@/lib/horario';
 
 function aplicarMascaraTelefone(entrada: string): string {
@@ -51,12 +51,21 @@ export default function PaginaAgenda() {
   const adicionar = async () => {
     try {
       if (!nome.trim() || !uid) return;
-      const anexo = arquivo ? await anexarCurriculo(uid, arquivo) : null;
+      let anexo: { caminhoCurriculo: string; tipoCurriculo: TipoCurriculo } | null = null;
+      let avisoAnexo = '';
+      if (arquivo) {
+        try {
+          anexo = await anexarCurriculo(uid, arquivo);
+        } catch {
+          avisoAnexo =
+            'Currículo não pôde ser enviado (Storage) — candidato cadastrado sem arquivo.';
+        }
+      }
       await adicionarEntrevista(uid, {
         nome: nome.trim(),
         telefone: telefone.trim(),
         data,
-        vagaId: vagaId || null,
+        vagaId: vagaId ? Number(vagaId) : null,
         duracaoMinutos: 45,
         curriculo: anexo ? undefined : '',
         tipoCurriculo: anexo?.tipoCurriculo,
@@ -67,7 +76,7 @@ export default function PaginaAgenda() {
       setTelefone('');
       setVagaId('');
       setArquivo(null);
-      setErro('');
+      setErro(avisoAnexo);
       setFormAberto(false);
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Não foi possível reservar o horário.');
@@ -114,11 +123,17 @@ export default function PaginaAgenda() {
         </p>
       )}
 
+      {erro && (
+        <p className="dica" style={{ color: 'var(--erro, #c0392b)', marginTop: 12 }}>
+          {erro}
+        </p>
+      )}
+
       {entrevistas.map((e) => (
         <CartaoCandidato
           key={e.id}
           entrevista={e}
-          vaga={vagas.find((v) => v.id === e.vagaId)?.titulo ?? ''}
+          vaga={vagas.find((v) => Number(v.id) === e.vagaId)?.titulo ?? ''}
           aoAbrir={() => router.push(`/entrevista/${e.id}`)}
           aoSubir={() => moverEntrevista(uid, e.id, -1)}
           aoDescer={() => moverEntrevista(uid, e.id, 1)}

@@ -78,11 +78,15 @@ internal fun <T> DocumentReference.fluxo(mapear: (DocumentSnapshot?) -> T): Flow
  * local, então dois aparelhos nunca geram o mesmo documento (e a escrita
  * offline não sobrescreve um documento já sincronizado). Vira o mesmo Long que
  * os repositórios e a interface já esperam.
+ *
+ * O valor fica SEMPRE abaixo de 2^53 (o site lê como número do JavaScript e
+ * precisaria de exatidão): `(millis - época) * 4096 + acaso` em vez de
+ * `millis shl 20`, que passa muito do limite seguro.
  */
 internal fun novoId(): Long {
-    val agora = System.currentTimeMillis()
-    val acaso = Random.nextInt(1 shl 20)
-    return (agora shl 20) or acaso.toLong()
+    val desdeEpoca = System.currentTimeMillis() - 1704067200000L
+    val acaso = Random.nextInt(1 shl 12)
+    return (desdeEpoca * 4096) + acaso.toLong()
 }
 
 // ---------------------------------------------------------------------------

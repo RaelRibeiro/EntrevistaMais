@@ -8,6 +8,7 @@ import android.os.ParcelFileDescriptor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileNotFoundException
 
 /**
  * Converte o currículo em PDF em imagens, uma por página.
@@ -41,58 +42,72 @@ class CurriculoPaginasRepository(
      * currículo reaproveita as imagens enquanto ele não mudar.
      */
     suspend fun paginas(caminho: String): Resultado = withContext(Dispatchers.IO) {
-        val arquivo = File(anexoRepository.resolverLocal(caminho))
-        if (!arquivo.exists()) {
-            return@withContext Resultado.Erro("Currículo não encontrado.")
-        }
+        val arquivo = arquivoPronto(caminho)
+            ?: return@withContext Resultado.Erro("Currículo não encontrado neste aparelho.")
 
         if (!arquivo.name.endsWith(PDF, ignoreCase = true)) {
             return@withContext Resultado.Paginas(listOf(arquivo.absolutePath))
         }
 
-        try {
-            val pastaDoArquivo = File(pasta, pastaDe(caminho))
-            val existentes = paginasExistentes(pastaDoArquivo)
-            if (existentes.isNotEmpty()) {
-                return@withContext Resultado.Paginas(existentes)
-            }
+        val pastaDoArquivo = File(pasta, pastaDe(caminho))
+        val existentes = paginasExistentes(pastaDoArquivo)
+        if (existentes.isNotEmpty()) {
+            return@withContext Resultado.Paginas(existentes)
+        }
 
-            val novas = renderizar(arquivo, pastaDoArquivo)
-            if (novas.isEmpty()) {
-                Resultado.Erro("Não consegui ler as páginas deste PDF.")
-            } else {
-                Resultado.Paginas(novas)
-            }
+        renderizar(arquivo, pastaDoArquivo, caminho)
+    }
+
+    /**
+     * Arquivo local legível, baixando do Storage quando ainda não está em
+     * cache. Arquivo de tamanho zero é sobra de um download interrompido e é
+     * descartado antes de tentar de novo.
+     */
+    private suspend fun arquivoPronto(caminho: String): File? {
+        val local = runCatching { anexoRepository.resolverLocal(caminho) }.getOrNull() ?: return null
+        val arquivo = File(local)
+        return arquivo.takeIf { it.isFile && it.length() > 0L }
+    }
+
+    /**
+     * Desenha as páginas do PDF em JPEGs dentro de [pastaDoArquivo].
+     *
+     * Se o [ParcelFileDescriptor] não conseguir abrir o arquivo, a cópia local
+     * provavelmente está incompleta: apagamos e baixamos de novo uma única vez.
+     */
+    private suspend fun renderizar(arquivo: File, pastaDoArquivo: File, caminho: String): Resultado {
+        return try {
+            renderizarPaginas(arquivo, pastaDoArquivo)
         } catch (e: SecurityException) {
             // O arquivo está protegido pelo sistema (ex.: "Nenhum app pode acessar").
             Resultado.Erro("O Android bloqueou a abertura deste currículo.")
+        } catch (e: FileNotFoundException) {
+            if (!anexoRepository.ehCaminhoNuvem(caminho)) {
+                return Resultado.Erro("O arquivo deste currículo não está mais no aparelho.")
+            }
+            val novo = runCatching { anexoRepository.baixarDaNuvem(caminho) }.getOrNull()
+                ?.let(::File)
+                ?.takeIf { it.isFile && it.length() > 0L }
+                ?: return Resultado.Erro("Não consegui baixar este currículo do Storage.")
+            runCatching { pastaDoArquivo.deleteRecursively() }
+            try {
+                renderizarPaginas(novo, pastaDoArquivo)
+            } catch (e2: Exception) {
+                Resultado.Erro("Não consegui abrir o currículo: ${e2.message ?: "PDF inválido"}")
+            }
         } catch (e: Exception) {
             Resultado.Erro("Não consegui abrir o currículo: ${e.message ?: "PDF inválido"}")
         }
     }
 
-    private fun paginasExistentes(pastaDoArquivo: File): List<String> {
-        if (!pastaDoArquivo.exists()) return emptyList()
-        val arquivos = pastaDoArquivo.listFiles { arquivo ->
-            arquivo.extension == EXTENSAO
-        } ?: return emptyList()
-
-        val paginas = arquivos
-            .map { arquivo -> arquivo.name.substringBeforeLast('.') }
-            .filter { nome ->
-                // Página sem número indica renderização pela metade: descarta tudo.
-                nome.toIntOrNull() != null
-            }
-            .sortedBy { it.toInt() }
-
-        return paginas.map { File(pastaDoArquivo, "$it.$EXTENSAO").absolutePath }
-    }
-
-    private fun renderizar(arquivo: File, pastaDoArquivo: File): List<String> {
+    private fun renderizarPaginas(arquivo: File, pastaDoArquivo: File): Resultado {
+        if (!pastaDoArquivo.exists()) pastaDoArquivo.mkdirs()
         val descritor = ParcelFileDescriptor.open(arquivo, ParcelFileDescriptor.MODE_READ_ONLY)
         PdfRenderer(descritor).use { renderizador ->
             val quantidade = renderizador.pageCount
-            if (quantidade <= 0) return emptyList()
+            if (quantidade <= 0) {
+                return Resultado.Erro("Não consegui ler as páginas deste PDF.")
+            }
 
             val caminhos = mutableListOf<String>()
             for (indice in 0 until quantidade) {
@@ -117,8 +132,25 @@ class CurriculoPaginasRepository(
                     caminhos += destino.absolutePath
                 }
             }
-            return caminhos
+            return Resultado.Paginas(caminhos)
         }
+    }
+
+    private fun paginasExistentes(pastaDoArquivo: File): List<String> {
+        if (!pastaDoArquivo.exists()) return emptyList()
+        val arquivos = pastaDoArquivo.listFiles { arquivo ->
+            arquivo.extension == EXTENSAO
+        } ?: return emptyList()
+
+        val paginas = arquivos
+            .map { arquivo -> arquivo.name.substringBeforeLast('.') }
+            .filter { nome ->
+                // Página sem número indica renderização pela metade: descarta tudo.
+                nome.toIntOrNull() != null
+            }
+            .sortedBy { it.toInt() }
+
+        return paginas.map { File(pastaDoArquivo, "$it.$EXTENSAO").absolutePath }
     }
 
     /** Pasta do cache própria de um currículo, derivada do caminho dele. */

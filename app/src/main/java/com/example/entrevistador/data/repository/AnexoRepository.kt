@@ -83,6 +83,9 @@ class AnexoRepository(
     /** Baixa um currículo do Storage para o cache e devolve o caminho local. */
     suspend fun baixarDaNuvem(caminhoNuvem: String): String = withContext(Dispatchers.IO) {
         val destino = File(pastaCacheNuvem, sanear(caminhoNuvem.substringAfterLast('/')))
+        // Download anterior interrompido deixa um arquivo pela metade; descartar
+        // antes de tentar de novo evita tentar abrir um PDF truncado.
+        runCatching { if (destino.exists()) destino.delete() }
         storage.reference.child(caminhoNuvem).getFile(destino).await()
         destino.absolutePath
     }
@@ -116,9 +119,11 @@ class AnexoRepository(
 
     /** Resolve para um arquivo local: devolve o caminho como está ou baixa do Storage. */
     suspend fun resolverLocal(caminho: String): String {
-        if (!ehCaminhoNuvem(caminho) || File(caminho).exists()) return caminho
+        if (!ehCaminhoNuvem(caminho)) return caminho
+        if (File(caminho).exists()) return caminho
         val local = File(pastaCacheNuvem, sanear(caminho.substringAfterLast('/')))
-        if (local.exists()) return local.absolutePath
+        // Arquivo de tamanho zero é sobra de um download que falhou no meio.
+        if (local.exists() && local.length() > 0L) return local.absolutePath
         return baixarDaNuvem(caminho)
     }
 
