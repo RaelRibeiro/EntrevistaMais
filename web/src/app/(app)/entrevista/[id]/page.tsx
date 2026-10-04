@@ -9,34 +9,44 @@ import {
   observarPerguntas,
   observarRespostas,
   salvarResposta,
-  atualizarStatus,
   atualizarEntrevista,
+  salvarResumoCurriculo,
+  reabrirEntrevista,
   observarVagas,
   anexarCurriculo,
   apagarCurriculoArquivo,
   urlDoCurriculo,
   observarExperiencias,
   salvarExperiencia,
+  atualizarExperiencia,
   removerExperiencia,
 } from '@/lib/firestore';
 import type { Entrevista, Vaga, Roteiro, Pergunta, LinhaExperiencia } from '@/lib/tipos';
-import { ehFinalizado, horarioDaVaga } from '@/lib/tipos';
-import { minutosParaHora } from '@/lib/horario';
+import { ROTULO_STATUS, ehFinalizado, StatusEntrevista } from '@/lib/tipos';
+import { minutosParaHora, formatarTelefone } from '@/lib/horario';
 
 type Props = { params: Promise<{ id: string }> };
+
+type AbaEntrevista = 'CURRICULO' | 'ROTEIRO';
 
 export default function PaginaEntrevista({ params }: Props) {
   const { id } = use(params);
   const { usuario } = useAuth();
   const uid = usuario?.uid ?? '';
+  const [carregando, setCarregando] = useState(true);
   const [entrevista, setEntrevista] = useState<Entrevista | null>(null);
   const [vagas, setVagas] = useState<Vaga[]>([]);
   const [roteiros, setRoteiros] = useState<Roteiro[]>([]);
+  const [roteiro, setRoteiro] = useState<Roteiro | null>(null);
   const [perguntas, setPerguntas] = useState<Pergunta[]>([]);
   const [respostas, setRespostas] = useState<Record<string, string>>({});
+  const [aba, setAba] = useState<AbaEntrevista>('CURRICULO');
+  const [mensagem, setMensagem] = useState('');
+  const [confirmarFinalizacao, setConfirmarFinalizacao] = useState(false);
 
   useEffect(() => {
     if (!uid) return;
+    setCarregando(true);
     return observarEntrevista(uid, id, setEntrevista);
   }, [uid, id]);
 
@@ -53,14 +63,15 @@ export default function PaginaEntrevista({ params }: Props) {
   // Roteiro da entrevista: o da vaga se existir, senão o padrão — igual ao app.
   useEffect(() => {
     if (!uid || roteiros.length === 0) return;
-    const r =
+    const escolhido =
       roteiros.find((x) => x.vagaId === entrevista?.vagaId) ??
       roteiros.find((x) => x.padrao);
-    if (!r) {
+    setRoteiro(escolhido ?? null);
+    if (!escolhido) {
       setPerguntas([]);
       return;
     }
-    return observarPerguntas(uid, r.id, setPerguntas);
+    return observarPerguntas(uid, escolhido.id, setPerguntas);
   }, [uid, roteiros, entrevista?.vagaId]);
 
   useEffect(() => {
@@ -68,121 +79,208 @@ export default function PaginaEntrevista({ params }: Props) {
     return observarRespostas(uid, id, setRespostas);
   }, [uid, id]);
 
-  if (!entrevista) return <p className="dica">Carregando entrevista…</p>;
+  if (carregando) return <p className="dica">Carregando entrevista…</p>;
+
+  if (!entrevista) {
+    return (
+      <div className="cartao">
+        <strong>Entrevista não encontrada.</strong>
+        <p className="dica" style={{ margin: 0 }}>
+          <Link href="/agenda">Voltar à agenda</Link>
+        </p>
+      </div>
+    );
+  }
 
   const vaga = vagas.find((v) => Number(v.id) === entrevista.vagaId);
   const finalizada = ehFinalizado(entrevista.status);
   const emAndamento = entrevista.status === 'EM_ANDAMENTO';
+  // As respostas do roteiro viram registro depois que a entrevista terminou de
+  // qualquer jeito — mesmo regra do app (`AbaRoteiro.somenteLeitura`).
+  const somenteLeitura = !emAndamento && entrevista.status !== 'AGENDADA';
+
+  /**
+   * Roda uma transição de status e devolve a mensagem do erro do Firestore
+   * para a tela, como o app faz pelos repositórios.
+   */
+  const acao = async (acaoInterna: () => Promise<void>, sucesso: string) => {
+    try {
+      await acaoInterna();
+      setMensagem(sucesso);
+    } catch {
+      setMensagem('Não foi possível concluir a operação. Tente novamente.');
+    }
+  };
 
   const iniciar = () =>
-    atualizarEntrevista(uid, id, {
-      status: 'EM_ANDAMENTO',
-      inicioReal: Date.now(),
-      inicioManual: true,
-    });
+    acao(
+      async () => {
+        // Não marca o horário como manual: no app iniciar a entrevista não
+        // libera o candidato do recálculo da agenda, e no site isso deixava a
+        // entrevista travada num horário errado e marcada como "alterado".
+        await atualizarEntrevista(uid, id, {
+          status: 'EM_ANDAMENTO',
+          inicioReal: Date.now(),
+        });
+      },
+      'Entrevista iniciada.',
+    );
 
-  const concluir = () =>
-    atualizarEntrevista(uid, id, { status: 'CONCLUIDA', fimReal: Date.now() });
+  const finalizar = () =>
+    acao(
+      async () => {
+        const agora = Date.now();
+        await atualizarEntrevista(uid, id, {
+          status: 'CONCLUIDA',
+          // O app garante os dois campos; sem o início não haveria como
+          // calcular a duração real depois.
+          inicioReal: entrevista.inicioReal ?? agora,
+          fimReal: agora,
+        });
+      },
+      'Entrevista concluída.',
+    );
 
-  const voltarParaAgendada = () => atualizarStatus(uid, id, 'AGENDADA');
+  const decidir = (status: StatusEntrevista, sucesso: string) =>
+    acao(() => atualizarEntrevista(uid, id, { status }), sucesso);
+
+  const reabrir = () =>
+    acao(
+      () => reabrirEntrevista(uid, id),
+      'Candidato reaberto. Pode ajustar as respostas e iniciar de novo.',
+    );
+
+  const podeIniciar = !emAndamento && !finalizada;
 
   return (
     <div>
-      <Link href="/agenda" className="dica" style={{ display: 'inline-block', marginBottom: 10 }}>
-        ← Voltar à agenda
-      </Link>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <h1 className="titulo" style={{ flex: 1, marginBottom: 4 }}>
-          {entrevista.nome}
-        </h1>
-        <span className={`status ${entrevista.status.toLowerCase()}`}>
-          {entrevista.status.replace('_', ' ').toLowerCase()}
-        </span>
-      </div>
-      <p className="subtitulo" style={{ marginBottom: 16 }}>
-        {minutosParaHora(entrevista.inicioMinutos)}
-        {vaga ? ' · ' + vaga.titulo : ''}
-        {entrevista.telefone ? ' · ' + entrevista.telefone : ''}
-      </p>
-
-      {emAndamento && <Cronometro inicioReal={entrevista.inicioReal} />}
-      {entrevista.status === 'CONCLUIDA' && entrevista.inicioReal && (
-        <div className="cartao">
-          <strong>Tempo de entrevista</strong>
-          <p className="dica" style={{ margin: 0 }}>
-            {formatarDuracao((entrevista.fimReal ?? Date.now()) - entrevista.inicioReal)}
-          </p>
+      <div className="cartao">
+        <div className="secao-titulo">Candidato</div>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            flexWrap: 'wrap',
+            marginBottom: 8,
+          }}
+        >
+          <h1 className="titulo" style={{ margin: 0, flex: 1 }}>
+            {entrevista.nome}
+          </h1>
+          <span className={`status ${entrevista.status.toLowerCase()}`}>
+            {ROTULO_STATUS[entrevista.status]}
+          </span>
         </div>
+        <p className="dica" style={{ margin: 0 }}>
+          {formatarTelefone(entrevista.telefone)}
+        </p>
+        <p className="dica" style={{ margin: 0 }}>
+          {dataParaTexto(entrevista.data)} · {minutosParaHora(entrevista.inicioMinutos)} às{' '}
+          {minutosParaHora(entrevista.inicioMinutos + entrevista.duracaoMinutos)}
+        </p>
+        {vaga ? (
+          <p className="dica" style={{ margin: 0 }}>
+            {vaga.titulo}
+          </p>
+        ) : null}
+      </div>
+
+      {emAndamento && (
+        <CartaoCronometro
+          inicioReal={entrevista.inicioReal}
+          duracaoPrevistaMinutos={entrevista.duracaoMinutos}
+        />
       )}
 
       {emAndamento && (
         <div className="cartao">
-          <strong>Entrevista em andamento</strong>
-          <div className="acoes">
-            <button className="botao" onClick={concluir}>
-              Concluir entrevista
-            </button>
-          </div>
+          <button className="botao" onClick={() => setConfirmarFinalizacao(true)}>
+            Finalizar entrevista
+          </button>
         </div>
       )}
 
-      {!finalizada && !emAndamento && (
-        <div className="cartao">
-          <strong>{entrevista.status === 'AGENDADA' ? 'Agendada' : 'Interrompida'}</strong>
-          <div className="acoes">
+      {podeIniciar && (
+        <>
+          <div className="cartao">
             <button className="botao" onClick={iniciar}>
-              {entrevista.status === 'AGENDADA'
-                ? 'Iniciar entrevista'
-                : 'Reabrir e iniciar entrevista'}
+              INICIAR
             </button>
           </div>
-        </div>
-      )}
-
-      {(entrevista.status === 'NAO_COMPARECEU' || entrevista.status === 'CANCELADA') && (
-        <div className="cartao">
-          <strong>Não houve entrevista</strong>
-          <div className="acoes">
-            <button className="botao botao-secundario" onClick={voltarParaAgendada}>
-              Reabrir
-            </button>
+          <div className="cartao">
+            <p className="dica" style={{ margin: 0 }}>
+              Toque em Iniciar para começar. A entrevista só começa a contar o tempo a partir
+              daí, e o horário real fica registrado.
+            </p>
           </div>
-        </div>
+        </>
       )}
 
-      <BlocoCurriculo uid={uid} entrevista={entrevista} somenteLeitura={finalizada} />
+      {finalizada && (
+        <ResumoFinalizado
+          entrevista={entrevista}
+          aoAprovar={() => decidir('APROVADO', 'Candidato aprovado para a próxima fase.')}
+          aoReprovar={() => decidir('REPROVADO', 'Candidato reprovado.')}
+          aoEncerrar={() => decidir('ENCERRADA', 'Candidato encerrado.')}
+          aoReabrir={reabrir}
+        />
+      )}
 
-      {finalizada ? (
-        <Decisoes uid={uid} id={id} status={entrevista.status} />
-      ) : null}
+      <Abas
+        aba={aba}
+        aoTrocar={setAba}
+        habilitada={emAndamento || finalizada}
+      />
 
-      {perguntas.length === 0 && (
-        <div className="cartao">
-          <strong>Nenhum roteiro</strong>
-          <p className="dica">
-            Crie o roteiro padrão na aba <Link href="/roteiro">Roteiro</Link>.
+      {aba === 'CURRICULO' ? (
+        <BlocoCurriculo uid={uid} entrevista={entrevista} aoMensagem={setMensagem} />
+      ) : (
+        <AbaRoteiro
+          uid={uid}
+          entrevista={entrevista}
+          roteiro={roteiro}
+          perguntas={perguntas}
+          respostas={respostas}
+          vaga={vaga}
+          somenteLeitura={somenteLeitura}
+          aoAlterar={(perguntaId, valor) => {
+            void salvarResposta(uid, id, perguntaId, valor);
+          }}
+        />
+      )}
+
+      {confirmarFinalizacao && (
+        <Dialogo
+          titulo="Finalizar entrevista?"
+          texto="O tempo total é registrado e o roteiro preenchido é salvo."
+          confirmar="Finalizar"
+          cancelar="Continuar"
+          aoConfirmar={() => {
+            setConfirmarFinalizacao(false);
+            void finalizar();
+          }}
+          aoCancelar={() => setConfirmarFinalizacao(false)}
+        />
+      )}
+
+      {mensagem && (
+        <div className="cartao" onClick={() => setMensagem('')}>
+          <strong>{mensagem}</strong>
+          <p className="dica" style={{ margin: 0 }}>
+            Toque para fechar.
           </p>
         </div>
       )}
-
-      {perguntas.map((pergunta, indice) => (
-        <PerguntaResposta
-          key={pergunta.id}
-          indice={indice}
-          uid={uid}
-          entrevistaId={id}
-          pergunta={pergunta}
-          valor={respostas[pergunta.id] ?? ''}
-          vaga={vaga}
-          dataHora={`${entrevista.data} ${minutosParaHora(entrevista.inicioMinutos)}`}
-          nome={entrevista.nome}
-          telefone={entrevista.telefone}
-          somenteLeitura={finalizada}
-          aoAlterar={(valor) => salvarResposta(uid, id, pergunta.id, valor)}
-        />
-      ))}
     </div>
   );
+}
+
+/** "2026-10-01" -> "01/10/2026". */
+function dataParaTexto(data: string): string {
+  const [ano, mes, dia] = data.split('-');
+  if (!ano || !mes || !dia) return data;
+  return `${dia}/${mes}/${ano}`;
 }
 
 function formatarDuracao(milissegundos: number): string {
@@ -190,24 +288,181 @@ function formatarDuracao(milissegundos: number): string {
   const horas = Math.floor(total / 3600);
   const minutos = Math.floor((total % 3600) / 60);
   const segundos = total % 60;
-  return [horas, minutos, segundos]
-    .map((n) => String(n).padStart(2, '0'))
-    .join(':');
+  return [horas, minutos, segundos].map((n) => String(n).padStart(2, '0')).join(':');
 }
 
-function Cronometro({ inicioReal }: { inicioReal: number | null }) {
+function CartaoCronometro({
+  inicioReal,
+  duracaoPrevistaMinutos,
+}: {
+  inicioReal: number | null;
+  duracaoPrevistaMinutos: number;
+}) {
   const [, forcar] = useState(0);
   useEffect(() => {
-    const timer = setInterval(() => forcar((n) => n + 1), 1000);
+    const timer = setInterval(() => forcar((n) => n + 1), 250);
     return () => clearInterval(timer);
   }, []);
+
   if (!inicioReal) return null;
+  const decorrido = Date.now() - inicioReal;
+  const tempoExcedido = decorrido > duracaoPrevistaMinutos * 60_000;
+
   return (
     <div className="cartao">
-      <strong>Cronômetro</strong>
-      <p className="dica" style={{ margin: 0, fontSize: 22 }}>
-        {formatarDuracao(Date.now() - inicioReal)}
+      <div style={{ fontSize: 26, fontWeight: 700, fontFamily: 'monospace' }}>
+        {formatarDuracao(decorrido)}
+      </div>
+      <p className="dica" style={{ margin: 0 }}>
+        {tempoExcedido
+          ? `Passou do tempo previsto de ${duracaoPrevistaMinutos} min`
+          : `Tempo previsto: ${duracaoPrevistaMinutos} min`}
       </p>
+    </div>
+  );
+}
+
+function Abas({
+  aba,
+  aoTrocar,
+  habilitada,
+}: {
+  aba: AbaEntrevista;
+  aoTrocar: (aba: AbaEntrevista) => void;
+  habilitada: boolean;
+}) {
+  const opcoes: [AbaEntrevista, string][] = [
+    ['CURRICULO', 'Currículo'],
+    ['ROTEIRO', 'Roteiro'],
+  ];
+  return (
+    <div className="fieldset" style={{ marginBottom: 12 }}>
+      {opcoes.map(([chave, rotulo]) => (
+        <span
+          key={chave}
+          className={aba === chave ? 'selecionado' : ''}
+          style={habilitada ? undefined : { opacity: 0.5 }}
+          onClick={() => {
+            if (habilitada) aoTrocar(chave);
+          }}
+        >
+          {rotulo}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Resumo de quem já passou por decisão ou foi encerrado.
+ *
+ * Mesmos botões e textos do cartão equivalente do app: decidir só faz sentido
+ * depois de concluída, quem já decidiu pode trocar a decisão e encerrar, e o
+ * encerramento é sempre reversível por "Reabrir candidato".
+ */
+function ResumoFinalizado({
+  entrevista,
+  aoAprovar,
+  aoReprovar,
+  aoEncerrar,
+  aoReabrir,
+}: {
+  entrevista: Entrevista;
+  aoAprovar: () => void;
+  aoReprovar: () => void;
+  aoEncerrar: () => void;
+  aoReabrir: () => void;
+}) {
+  const status = entrevista.status;
+  const encerrada = status === 'ENCERRADA';
+  const decidido = status === 'APROVADO' || status === 'REPROVADO';
+  const duracao =
+    entrevista.inicioReal !== null && entrevista.fimReal !== null
+      ? formatarDuracao(entrevista.fimReal - entrevista.inicioReal)
+      : null;
+
+  return (
+    <div className="cartao">
+      <strong>
+        {encerrada
+          ? 'Candidato encerrado'
+          : status === 'APROVADO'
+            ? 'Candidato aprovado'
+            : status === 'REPROVADO'
+              ? 'Candidato reprovado'
+              : 'Entrevista concluída'}
+      </strong>
+      {duracao ? (
+        <p className="dica" style={{ margin: 0 }}>
+          Duração real: {duracao}
+        </p>
+      ) : null}
+
+      <div className="acoes">
+        {!decidido && !encerrada && (
+          <>
+            <button className="botao botao-perigo" onClick={aoReprovar}>
+              Reprovar
+            </button>
+            <button className="botao" onClick={aoAprovar}>
+              Aprovar
+            </button>
+          </>
+        )}
+        {!encerrada && decidido && (
+          <button className="botao" onClick={aoEncerrar}>
+            Encerrar
+          </button>
+        )}
+      </div>
+
+      <p className="dica">
+        {encerrada
+          ? 'O registro, as respostas e o currículo continuam guardados. Para refazer a entrevista, use Reabrir.'
+          : decidido
+            ? 'Você pode trocar a decisão, encerrar ou reabrir a qualquer momento.'
+            : 'Você pode aprovar, reprovar ou encerrar este candidato.'}
+      </p>
+
+      <button className="botao botao-secundario" onClick={aoReabrir}>
+        Reabrir candidato
+      </button>
+      <p className="dica" style={{ margin: 0 }}>
+        As respostas e o currículo já preenchidos são mantidos.
+      </p>
+    </div>
+  );
+}
+
+function Dialogo({
+  titulo,
+  texto,
+  confirmar,
+  cancelar,
+  aoConfirmar,
+  aoCancelar,
+}: {
+  titulo: string;
+  texto: string;
+  confirmar: string;
+  cancelar: string;
+  aoConfirmar: () => void;
+  aoCancelar: () => void;
+}) {
+  return (
+    <div className="fundo-dialogo" onClick={aoCancelar}>
+      <div className="dialogo" onClick={(ev) => ev.stopPropagation()}>
+        <strong>{titulo}</strong>
+        <p className="dica">{texto}</p>
+        <div className="acoes">
+          <button className="botao" onClick={aoConfirmar}>
+            {confirmar}
+          </button>
+          <button className="botao botao-secundario" onClick={aoCancelar}>
+            {cancelar}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -215,15 +470,22 @@ function Cronometro({ inicioReal }: { inicioReal: number | null }) {
 function BlocoCurriculo({
   uid,
   entrevista: e,
-  somenteLeitura,
+  aoMensagem,
 }: {
   uid: string;
   entrevista: Entrevista;
-  somenteLeitura: boolean;
+  aoMensagem: (mensagem: string) => void;
 }) {
   const temArquivo = Boolean(e.caminhoCurriculo);
-  const [arquivo, setArquivo] = useState<File | null>(null);
+  const [editando, setEditando] = useState(false);
+  const [texto, setTexto] = useState(e.curriculo);
   const [erroAnexo, setErroAnexo] = useState('');
+
+  // A entrevista chega pelo observador do Firestore; enquanto o campo está em
+  // edição ele não pode ser sobrescrito por outra atualização da tela.
+  useEffect(() => {
+    if (!editando) setTexto(e.curriculo);
+  }, [e.curriculo, editando]);
 
   const abrirCurriculo = async () => {
     if (!e.caminhoCurriculo) return;
@@ -238,8 +500,7 @@ function BlocoCurriculo({
     }
   };
 
-  const trocarArquivo = async (novo: File | null) => {
-    if (!novo || !uid) return;
+  const trocarArquivo = async (novo: File) => {
     try {
       const anexo = await anexarCurriculo(uid, novo);
       if (e.caminhoCurriculo) void apagarCurriculoArquivo(e.caminhoCurriculo);
@@ -249,273 +510,392 @@ function BlocoCurriculo({
         nomeArquivoCurriculo: novo.name,
       });
       setErroAnexo('');
+      aoMensagem('Currículo anexado.');
     } catch (erro) {
       const detalhe = erro instanceof Error ? erro.message : '';
       setErroAnexo(`Não consegui enviar o currículo. ${detalhe}`.trim());
     }
   };
 
-  const removerArquivo = async () => {
-    if (!uid || !e.caminhoCurriculo) return;
-    await apagarCurriculoArquivo(e.caminhoCurriculo);
-    await atualizarEntrevista(uid, e.id, {
-      caminhoCurriculo: '',
-      nomeArquivoCurriculo: '',
-      tipoCurriculo: 'RESUMO',
-    });
+  const salvar = async () => {
+    await salvarResumoCurriculo(uid, e.id, texto);
+    setEditando(false);
+    aoMensagem('Currículo atualizado.');
   };
 
   return (
     <div className="cartao">
-      <strong>Currículo</strong>
-      {temArquivo && (
-        <p className="dica" style={{ marginBottom: 8 }}>
-          📎 {e.nomeArquivoCurriculo} ({e.tipoCurriculo === 'PDF' ? 'PDF' : 'Imagem'})
-        </p>
-      )}
-      {temArquivo && (
-        <div className="acoes" style={{ marginBottom: 8 }}>
-          <button className="botao" onClick={abrirCurriculo}>
-            Abrir currículo
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div className="secao-titulo" style={{ flex: 1, margin: 0 }}>
+          Currículo
+        </div>
+        {!editando && (
+          <button className="botao botao-secundario" onClick={() => setEditando(true)}>
+            Editar
           </button>
-          {!somenteLeitura && (
-            <button className="botao botao-perigo" onClick={removerArquivo}>
-              Remover arquivo
-            </button>
-          )}
+        )}
+      </div>
+
+      {temArquivo && (
+        <div
+          className="cartao"
+          style={{ padding: 12, marginTop: 12, cursor: 'pointer' }}
+          onClick={() => void abrirCurriculo()}
+        >
+          <div>{e.nomeArquivoCurriculo}</div>
+          <div className="dica" style={{ margin: 0 }}>
+            {e.tipoCurriculo === 'PDF' ? 'PDF anexado · toque para abrir' : 'Imagem anexada'}
+          </div>
         </div>
       )}
-      {!temArquivo && !somenteLeitura && (
-        <label className="campo arquivo">
-          {arquivo ? `📎 ${arquivo.name}` : '📄 Anexar currículo (PDF ou imagem)'}
+
+      {!temArquivo && !editando && (
+        <label className="campo arquivo" style={{ marginTop: 12, display: 'block' }}>
+          Anexar PDF ou imagem
           <input
             type="file"
             accept=".pdf,image/*"
             style={{ display: 'none' }}
             onChange={(ev) => {
-              setArquivo(ev.target.files?.[0] ?? null);
-              if (ev.target.files?.[0]) void trocarArquivo(ev.target.files[0]);
+              const arquivo = ev.target.files?.[0];
+              if (arquivo) void trocarArquivo(arquivo);
             }}
           />
         </label>
       )}
+
       {erroAnexo && (
         <p className="dica" style={{ color: 'var(--erro, #c0392b)' }}>
           {erroAnexo}
         </p>
       )}
-      <textarea
-        className="campo"
-        rows={3}
-        placeholder="Resumo do candidato (observações, histórico…)"
-        value={e.curriculo}
-        readOnly={somenteLeitura}
-        onChange={(ev) =>
-          somenteLeitura
-            ? undefined
-            : atualizarEntrevista(uid, e.id, { curriculo: ev.target.value })
-        }
-        style={{ marginTop: 8 }}
-      />
+
+      {editando ? (
+        <>
+          <div style={{ marginTop: 12 }}>
+            <span className="dica">Resumo do currículo</span>
+            <div className="dica">Se o candidato enviou arquivo, escreva aqui só o essencial.</div>
+            <textarea
+              className="campo"
+              rows={8}
+              value={texto}
+              {...SEM_AUTOFILL}
+              onChange={(ev) => setTexto(ev.target.value)}
+            />
+          </div>
+          <div className="acoes">
+            <button className="botao" onClick={() => void salvar()}>
+              Salvar
+            </button>
+            <button
+              className="botao botao-secundario"
+              onClick={() => {
+                setTexto(e.curriculo);
+                setEditando(false);
+              }}
+            >
+              Cancelar
+            </button>
+          </div>
+        </>
+      ) : e.curriculo.trim() === '' && !temArquivo ? (
+        <p className="dica" style={{ marginBottom: 0 }}>
+          Nenhum currículo lançado para este candidato. Anexe o PDF/imagem ou toque em Editar
+          para escrever o resumo.
+        </p>
+      ) : (
+        <p style={{ marginBottom: 0 }}>{e.curriculo}</p>
+      )}
     </div>
   );
 }
 
-function Decisoes({
+function AbaRoteiro({
   uid,
-  id,
-  status,
-}: {
-  uid: string;
-  id: string;
-  status: Entrevista['status'];
-}) {
-  return (
-    <div className="cartao">
-      <strong>Decisão</strong>
-      <p className="dica">Registra a avaliação final do candidato.</p>
-      <div className="acoes">
-        {status === 'CONCLUIDA' && (
-          <>
-            <button
-              className="botao"
-              onClick={() => atualizarStatus(uid, id, 'APROVADO')}
-            >
-              Aprovar candidato
-            </button>
-            <button
-              className="botao botao-perigo"
-              onClick={() => atualizarStatus(uid, id, 'REPROVADO')}
-            >
-              Reprovar candidato
-            </button>
-            <button
-              className="botao botao-secundario"
-              onClick={() => atualizarStatus(uid, id, 'ENCERRADA')}
-            >
-              Encerrar sem decisão
-            </button>
-          </>
-        )}
-        {status === 'APROVADO' && (
-          <>
-            <strong>Aprovado</strong>
-            <button
-              className="botao botao-secundario"
-              onClick={() => atualizarStatus(uid, id, 'CONCLUIDA')}
-            >
-              Reabrir
-            </button>
-          </>
-        )}
-        {status === 'REPROVADO' && (
-          <>
-            <strong>Reprovado</strong>
-            <button
-              className="botao botao-secundario"
-              onClick={() => atualizarStatus(uid, id, 'CONCLUIDA')}
-            >
-              Reabrir
-            </button>
-          </>
-        )}
-        {status === 'ENCERRADA' && (
-          <button
-            className="botao botao-secundario"
-            onClick={() => atualizarStatus(uid, id, 'CONCLUIDA')}
-          >
-            Reabrir
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function valorAutomatico(
-  pergunta: Pergunta,
-  parametros: { dataHora: string; nome: string; telefone: string; vaga: Vaga | undefined },
-): string {
-  switch (pergunta.respostaAutomatica) {
-    case 'DIA_E_HORA':
-      return parametros.dataHora;
-    case 'NOME_CANDIDATO':
-      return parametros.nome;
-    case 'TELEFONE_CANDIDATO':
-      return parametros.telefone;
-    case 'DADOS_DA_VAGA':
-      return [
-        parametros.vaga ? horarioDaVaga(parametros.vaga) : '',
-        parametros.vaga?.tipoContrato,
-        parametros.vaga?.salarioBeneficios,
-        parametros.vaga?.tempoExperiencia,
-        parametros.vaga?.escolaridade,
-        parametros.vaga?.exigeHabilitacao
-          ? `Habilitação: ${parametros.vaga.exigeHabilitacao}`
-          : '',
-        parametros.vaga?.resumoAtividades,
-      ]
-        .filter(Boolean)
-        .join('\n');
-    default:
-      return '';
-  }
-}
-
-function PerguntaResposta({
-  indice,
-  uid,
-  entrevistaId,
-  pergunta,
-  valor,
+  entrevista,
+  roteiro,
+  perguntas,
+  respostas,
   vaga,
-  dataHora,
-  nome,
-  telefone,
   somenteLeitura,
   aoAlterar,
 }: {
-  indice: number;
   uid: string;
-  entrevistaId: string;
-  pergunta: Pergunta;
-  valor: string;
+  entrevista: Entrevista;
+  roteiro: Roteiro | null;
+  perguntas: Pergunta[];
+  respostas: Record<string, string>;
   vaga: Vaga | undefined;
-  dataHora: string;
-  nome: string;
-  telefone: string;
   somenteLeitura: boolean;
-  aoAlterar: (valor: string) => void;
+  aoAlterar: (perguntaId: string, valor: string) => void;
 }) {
-  if (pergunta.tipo === 'SECAO') {
-    return <div className="secao-titulo">{pergunta.titulo}</div>;
-  }
-
-  if (pergunta.tipo === 'TABELA_EXPERIENCIAS') {
+  if (!roteiro) {
     return (
-      <TabelaExperiencias
-        indice={indice}
-        uid={uid}
-        entrevistaId={entrevistaId}
-        pergunta={pergunta}
-        somenteLeitura={somenteLeitura}
-      />
+      <div className="cartao">
+        <p className="dica" style={{ margin: 0 }}>
+          Nenhum roteiro cadastrado.
+        </p>
+      </div>
     );
   }
 
-  const automatico = valorAutomatico(pergunta, { dataHora, nome, telefone, vaga });
-  const exibido = valor || automatico;
-  const dica =
-    pergunta.respostaAutomatica !== 'NENHUMA' && !valor
-      ? 'Preenchido pelo sistema — pode editar se precisar.'
-      : pergunta.dica;
+  const diaEHora = `${dataParaTexto(entrevista.data)} às ${String(
+    Math.floor(entrevista.inicioMinutos / 60),
+  ).padStart(2, '0')}h${String(entrevista.inicioMinutos % 60).padStart(2, '0')}`;
+
+  const automaticos: Record<string, string> = {
+    DIA_E_HORA: diaEHora,
+    NOME_CANDIDATO: entrevista.nome,
+    TELEFONE_CANDIDATO: formatarTelefone(entrevista.telefone),
+    DADOS_DA_VAGA: vaga
+      ? [vaga.horarioTrabalho, vaga.salarioBeneficios].filter(Boolean).join(' · ')
+      : '',
+  };
+
+  return (
+    <div>
+      <div className="secao-titulo">{roteiro.titulo}</div>
+
+      {somenteLeitura && (
+        <div className="cartao">
+          <strong>Respostas registradas</strong>
+          <p className="dica" style={{ margin: 0 }}>
+            Esta entrevista foi finalizada. As respostas abaixo são o registro final e não
+            podem mais ser editadas.
+          </p>
+        </div>
+      )}
+
+      <BlocoVaga vaga={vaga} />
+
+      {perguntas.map((pergunta) => {
+        if (pergunta.tipo === 'SECAO') {
+          return (
+            <div className="secao-titulo" key={pergunta.id}>
+              {pergunta.titulo}
+            </div>
+          );
+        }
+
+        if (pergunta.tipo === 'TABELA_EXPERIENCIAS') {
+          return (
+            <TabelaExperiencias
+              key={pergunta.id}
+              uid={uid}
+              entrevistaId={entrevista.id}
+              pergunta={pergunta}
+              somenteLeitura={somenteLeitura}
+            />
+          );
+        }
+
+        return (
+          <CampoPergunta
+            key={pergunta.id}
+            pergunta={pergunta}
+            valor={respostas[pergunta.id] ?? ''}
+            automatico={automaticos[pergunta.respostaAutomatica] ?? ''}
+            somenteLeitura={somenteLeitura}
+            aoAlterar={(valor) => aoAlterar(pergunta.id, valor)}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+/** Resumo da vaga no topo do roteiro, preenchido a partir do cadastro de vagas. */
+function BlocoVaga({ vaga }: { vaga: Vaga | undefined }) {
+  if (!vaga) {
+    return (
+      <div className="cartao">
+        <strong>Informações da vaga</strong>
+        <p className="dica" style={{ margin: 0 }}>
+          Nenhuma vaga vinculada a esta entrevista. Cadastre a aba Vagas para estas informações
+          aparecerem aqui.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="cartao">
-      <strong>
-        {indice + 1}. {pergunta.titulo}
-      </strong>
-      {dica ? <p className="dica">{dica}</p> : null}
+      <strong>Informações da vaga</strong>
+      <p className="titulo" style={{ fontSize: 18, margin: '4px 0 0' }}>
+        {vaga.titulo}
+      </p>
+      <ItemDaVaga rotulo="Horário de trabalho" valor={vaga.horarioTrabalho} />
+      <ItemDaVaga rotulo="Salário e benefícios" valor={vaga.salarioBeneficios} />
+      <ItemDaVaga rotulo="Tempo de experiência" valor={vaga.tempoExperiencia} />
+      <ItemDaVaga rotulo="Escolaridade" valor={vaga.escolaridade} />
+      <ItemDaVaga rotulo="Precisa de habilitação" valor={vaga.exigeHabilitacao} />
+      <ItemDaVaga rotulo="Resumo das atividades principais" valor={vaga.resumoAtividades} />
+    </div>
+  );
+}
 
-      {pergunta.tipo === 'SIM_NAO' ? (
+function ItemDaVaga({ rotulo, valor }: { rotulo: string; valor: string }) {
+  if (!valor || !valor.trim()) return null;
+  return (
+    <div style={{ marginTop: 6 }}>
+      <div className="dica" style={{ margin: 0 }}>
+        {rotulo}
+      </div>
+      <div>{valor}</div>
+    </div>
+  );
+}
+
+/**
+ * Um campo por pergunta. Pergunta com resposta automática mostra o valor que o
+ * app preencheu e deixa sobrescrever.
+ */
+function CampoPergunta({
+  pergunta,
+  valor,
+  automatico,
+  somenteLeitura,
+  aoAlterar,
+}: {
+  pergunta: Pergunta;
+  valor: string;
+  automatico: string;
+  somenteLeitura: boolean;
+  aoAlterar: (valor: string) => void;
+}) {
+  const preenchidoPeloApp = valor === '' && automatico !== '';
+  const dica = preenchidoPeloApp
+    ? 'Preenchido pelo app — pode editar se precisar.'
+    : pergunta.dica || null;
+
+  if (pergunta.tipo === 'SIM_NAO') {
+    const selecionado = valor || (preenchidoPeloApp ? automatico : '');
+    return (
+      <div className="cartao">
+        <div className="dica" style={{ margin: 0 }}>
+          {pergunta.titulo}
+        </div>
+        {dica && (
+          <div className="dica" style={{ fontSize: 12 }}>
+            {dica}
+          </div>
+        )}
         <div className="fieldset">
-          {['Sim', 'Não', 'Talvez'].map((opcao) => (
+          {['Sim', 'Não'].map((opcao) => (
             <span
               key={opcao}
-              className={valor === opcao ? 'selecionado' : ''}
-              onClick={() => !somenteLeitura && aoAlterar(opcao)}
+              className={selecionado === opcao ? 'selecionado' : ''}
+              style={somenteLeitura ? { opacity: 0.6 } : undefined}
+              onClick={() => {
+                if (!somenteLeitura) aoAlterar(opcao);
+              }}
             >
               {opcao}
             </span>
           ))}
         </div>
-      ) : (
-        <textarea
-          className="campo"
-          rows={pergunta.tipo === 'TEXTO_LONGO' ? 4 : 2}
-          placeholder="Resposta"
-          value={exibido}
-          readOnly={somenteLeitura}
-          onChange={(e) => aoAlterar(e.target.value)}
-        />
-      )}
-      {valor && automatico && (
-        <div className="dica" style={{ color: 'var(--primaria)' }}>
-          {somenteLeitura ? 'Registro final' : 'Pode editar'}
+      </div>
+    );
+  }
+
+  const umaLinha = pergunta.tipo !== 'TEXTO_LONGO';
+  return (
+    <div className="cartao">
+      <div className="dica" style={{ margin: 0 }}>
+        {pergunta.titulo}
+      </div>
+      {dica && (
+        <div className="dica" style={{ fontSize: 12 }}>
+          {dica}
         </div>
       )}
+      <Campo
+        valor={valor || (preenchidoPeloApp ? automatico : '')}
+        aoAlterar={aoAlterar}
+        somenteLeitura={somenteLeitura}
+        numerico={pergunta.tipo === 'NUMERO'}
+        umaLinha={umaLinha}
+      />
     </div>
   );
 }
 
+/**
+ * Atributos que impedem o navegador de abrir o preenchimento automático sobre o
+ * campo.
+ *
+ * `autoComplete="off"` sozinho não basta: o Chrome ignora esse valor em quase
+ * todos os campos e ainda assim mostra a lista do Google por cima do texto. A
+ * combinação abaixo resolve — `one-time-code` marca o campo como "não
+ * preenchível", e `data-1p-ignore`/`data-lpignore` cobrem os gerenciadores de
+ * senha que fazem o mesmo.
+ */
+const SEM_AUTOFILL = {
+  autoComplete: 'off' as const,
+  'data-1p-ignore': true,
+  'data-lpignore': 'true',
+  'data-form-type': 'other',
+};
+
+/** Campo de texto que respeita o formato pedido pelo tipo da pergunta. */
+function Campo({
+  valor,
+  aoAlterar,
+  somenteLeitura,
+  numerico,
+  umaLinha,
+}: {
+  valor: string;
+  aoAlterar: (valor: string) => void;
+  somenteLeitura: boolean;
+  numerico: boolean;
+  umaLinha: boolean;
+}) {
+  if (numerico) {
+    return (
+      <input
+        className="campo"
+        type="number"
+        value={valor}
+        readOnly={somenteLeitura}
+        {...SEM_AUTOFILL}
+        onChange={(ev) => aoAlterar(ev.target.value)}
+      />
+    );
+  }
+  if (umaLinha) {
+    return (
+      <input
+        className="campo"
+        value={valor}
+        readOnly={somenteLeitura}
+        {...SEM_AUTOFILL}
+        onChange={(ev) => aoAlterar(ev.target.value)}
+      />
+    );
+  }
+  return (
+    <textarea
+      className="campo"
+      rows={4}
+      value={valor}
+      readOnly={somenteLeitura}
+      {...SEM_AUTOFILL}
+      onChange={(ev) => aoAlterar(ev.target.value)}
+    />
+  );
+}
+
+/**
+ * Mini tabela "locais onde trabalhou": Local, Ano, Duração, Cargo e Motivo da
+ * saída. Uma linha por emprego, com o botão de adicionar no fim.
+ */
 function TabelaExperiencias({
-  indice,
   uid,
   entrevistaId,
   pergunta,
   somenteLeitura,
 }: {
-  indice: number;
   uid: string;
   entrevistaId: string;
   pergunta: Pergunta;
@@ -528,61 +908,95 @@ function TabelaExperiencias({
     return observarExperiencias(uid, entrevistaId, setLinhas);
   }, [uid, entrevistaId]);
 
+  const colunas: [keyof LinhaExperiencia, string][] = [
+    ['local', 'Local'],
+    ['ano', 'Ano'],
+    ['duracao', 'Duração'],
+    ['cargo', 'Cargo'],
+    ['motivoSaida', 'Motivo da saída'],
+  ];
+
   const adicionar = async () => {
-    const campos = ['Local / empresa', 'Ano de início', 'Duração', 'Cargo', 'Motivo da saída'];
-    const [local, ano, duracao, cargo, motivoSaida] = campos.map((rotulo) =>
-      prompt(`${rotulo}:`)?.trim() ?? '',
-    );
-    if (!local && !cargo) return;
     await salvarExperiencia(uid, entrevistaId, {
-      local,
-      ano,
-      duracao,
-      cargo,
-      motivoSaida,
+      local: '',
+      ano: '',
+      duracao: '',
+      cargo: '',
+      motivoSaida: '',
       ordem: linhas.length,
+    });
+  };
+
+  const alterar = (linha: LinhaExperiencia, campo: keyof LinhaExperiencia, valor: string) => {
+    setLinhas((atuais) =>
+      atuais.map((l) => (l.id === linha.id ? { ...l, [campo]: valor } : l)),
+    );
+    void atualizarExperiencia(uid, entrevistaId, linha.id, {
+      [campo]: valor,
+      ordem: linha.ordem,
     });
   };
 
   return (
     <div className="cartao">
-      <strong>
-        {indice + 1}. {pergunta.titulo}
-      </strong>
-      {pergunta.dica ? <p className="dica">{pergunta.dica}</p> : null}
-      {linhas.length === 0 && (
-        <p className="dica">
-          Nenhuma experiência registrada.
-        </p>
-      )}
-      {linhas.map((linha) => (
-        <div
-          key={linha.id}
-          className="cartao"
-          style={{ padding: 10, marginBottom: 8 }}
-        >
-          <strong>{linha.local || linha.cargo || 'Experiência'}</strong>
-          <div className="dica" style={{ margin: 0 }}>
-            {[linha.ano, linha.duracao, linha.cargo]
-              .filter(Boolean)
-              .join(' · ')}
-            {linha.motivoSaida ? ` — ${linha.motivoSaida}` : ''}
-          </div>
-          {!somenteLeitura && (
-            <div className="acoes" style={{ marginTop: 6 }}>
-              <button
-                className="icone-botao"
-                onClick={() => removerExperiencia(uid, entrevistaId, linha.id)}
-              >
-                🗑
-              </button>
-            </div>
-          )}
+      <div className="secao-titulo" style={{ margin: 0 }}>
+        Locais onde trabalhou
+      </div>
+      {pergunta.dica && (
+        <div className="dica" style={{ fontSize: 12 }}>
+          {pergunta.dica}
         </div>
-      ))}
+      )}
+
+      <table className="tabela">
+        <thead>
+          <tr>
+            {colunas.map(([, rotulo]) => (
+              <th key={rotulo}>{rotulo}</th>
+            ))}
+            {linhas.length > 1 && <th />}
+          </tr>
+        </thead>
+        <tbody>
+          {linhas.map((linha) => (
+            <tr key={linha.id}>
+              {colunas.map(([campo, rotulo]) => (
+                <td key={rotulo}>
+                  <input
+                    className="campo"
+                    value={linha[campo]}
+                    readOnly={somenteLeitura}
+                    {...SEM_AUTOFILL}
+                    // `name` único por linha: sem ele o navegador reaproveita o
+                    // mesmo campo em todas as linhas e o popup reaparece.
+                    name={`exp_${linha.id}_${campo}`}
+                    aria-label={rotulo}
+                    onChange={(ev) => alterar(linha, campo, ev.target.value)}
+                  />
+                </td>
+              ))}
+              {linhas.length > 1 && (
+                <td>
+                  {!somenteLeitura && (
+                    <button
+                      className="icone-botao"
+                      title="Remover linha"
+                      aria-label="Remover linha"
+                      onClick={() => void removerExperiencia(uid, entrevistaId, linha.id)}
+                    >
+                      🗑
+                    </button>
+                  )}
+                </td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
       {!somenteLeitura && (
-        <button className="botao botao-secundario" onClick={adicionar}>
-          Adicionar experiência
+        <button className="botao botao-secundario" onClick={() => void adicionar()}>
+          Adicionar local
         </button>
       )}
     </div>

@@ -35,3 +35,61 @@ export function numero(valor: unknown): number {
   if (numeroFirestore?.toNumber) return numeroFirestore.toNumber();
   return Number(valor ?? 0) || 0;
 }
+
+const DIAS_SEMANA = [
+  'Domingo',
+  'Segunda-feira',
+  'Terça-feira',
+  'Quarta-feira',
+  'Quinta-feira',
+  'Sexta-feira',
+  'Sábado',
+];
+
+/** "540" -> "9h" / "45min" / "9h15min". */
+export function minutosParaHoraComSufixo(minutos: number): string {
+  const horas = Math.floor(minutos / 60);
+  const resto = minutos % 60;
+  if (horas > 0 && resto > 0) return `${horas}h${resto}min`;
+  if (horas > 0) return `${horas}h`;
+  return `${resto}min`;
+}
+
+/** "12/03/2026" a partir de uma data ISO (yyyy-mm-dd). */
+export function paraTexto(data: string): string {
+  const [ano, mes, dia] = data.split('-');
+  if (!ano || !mes || !dia) return data;
+  return `${dia}/${mes}/${ano}`;
+}
+
+/** "Quinta-feira" a partir de uma data ISO (yyyy-mm-dd). */
+export function paraDiaDaSemana(data: string): string {
+  const [ano, mes, dia] = data.split('-').map(Number);
+  if (!ano || !mes || !dia) return '';
+  const local = new Date(ano, mes - 1, dia);
+  return DIAS_SEMANA[local.getDay()] ?? '';
+}
+
+/** "Hoje - quinta-feira", "Amanhã - sexta-feira" ou "12/03/2026 - quinta-feira". */
+export function paraTituloAgenda(data: string): string {
+  const amanha = new Date();
+  amanha.setDate(amanha.getDate() + 1);
+  const isoAmanha = hojeIsoDe(amanha);
+  const diaDaSemana = paraDiaDaSemana(data);
+  if (data === hojeIso()) return `Hoje - ${diaDaSemana}`;
+  if (data === isoAmanha) return `Amanhã - ${diaDaSemana}`;
+  return `${paraTexto(data)} - ${diaDaSemana}`;
+}
+
+export function somarDias(data: string, dias: number): string {
+  const [ano, mes, dia] = data.split('-').map(Number);
+  const local = new Date(ano, mes - 1, dia + dias);
+  return hojeIsoDe(local);
+}
+
+function hojeIsoDe(data: Date): string {
+  const ano = data.getFullYear();
+  const mes = String(data.getMonth() + 1).padStart(2, '0');
+  const dia = String(data.getDate()).padStart(2, '0');
+  return `${ano}-${mes}-${dia}`;
+}

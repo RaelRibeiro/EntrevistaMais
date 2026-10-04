@@ -12,7 +12,7 @@ export default function PaginaInicial() {
     <main className="pagina" style={{ maxWidth: 640 }}>
       <header className="cabecalho">
         <nav className="nav">
-          <span className="marca">Entrevistador</span>
+          <span className="marca">EntrevistaMais</span>
           <span className="espaco" />
           {!carregando &&
             (usuario ? (
@@ -31,7 +31,7 @@ export default function PaginaInicial() {
       </header>
 
       <div style={{ textAlign: 'center', padding: '48px 0 16px' }}>
-        <h1 style={{ fontSize: 32, marginBottom: 8 }}>Entrevistador</h1>
+        <h1 style={{ fontSize: 32, marginBottom: 8 }}>EntrevistaMais</h1>
         <p className="subtitulo" style={{ fontSize: 17 }}>
           Agenda de entrevistas: horários calculados sozinhos, vagas, roteiro de
           perguntas e respostas. No computador é este site; no celular, o app.

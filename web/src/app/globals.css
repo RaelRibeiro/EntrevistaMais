@@ -303,6 +303,186 @@ label.campo.arquivo {
   margin: 4px 0 10px;
 }
 
+/* ------- Tabela editável ------- */
+.tabela {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 12px;
+}
+
+.tabela th {
+  text-align: left;
+  font-size: 12px;
+  color: var(--texto-suave);
+  font-weight: 600;
+  padding: 4px 4px 6px;
+  white-space: nowrap;
+}
+
+.tabela td {
+  padding: 2px 4px 2px 0;
+  vertical-align: top;
+}
+
+.tabela .campo {
+  min-width: 0;
+  margin: 0;
+}
+
+/* ------- Cabeçalho e linhas da agenda ------- */
+.cabecalho-agenda {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cabecalho-agenda input[type='date'] {
+  font-size: 17px;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  text-align: center;
+}
+
+.cabecalho-agenda input[type='date']:focus {
+  outline: none;
+}
+
+.linha-dia,
+.linha-acoes-dia {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.linha-dia {
+  margin-bottom: 10px;
+}
+
+.linha-acoes-dia {
+  margin-bottom: 10px;
+}
+
+.barra-vagas {
+  flex: 1;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--borda);
+  overflow: hidden;
+}
+
+.barra-vagas-preenchida {
+  height: 100%;
+  background: var(--primaria);
+}
+
+.hora-alterada {
+  color: var(--primaria);
+  margin: 0;
+}
+
+/* ------- Menu de ações do candidato ------- */
+.menu-acoes {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.menu-lista {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  min-width: 230px;
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(15, 20, 28, 0.16);
+  z-index: 30;
+  overflow: hidden;
+}
+
+.menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 14px;
+  border: none;
+  background: transparent;
+  font-size: 14px;
+  color: var(--texto);
+  cursor: pointer;
+}
+
+.menu-item:hover:not(:disabled) {
+  background: var(--fundo);
+}
+
+.menu-item:disabled {
+  color: var(--texto-suave);
+  cursor: default;
+  opacity: 0.55;
+}
+
+/* ------- Diálogo de confirmação ------- */
+.rotulo {
+  display: block;
+  font-size: 13px;
+  color: var(--texto-suave);
+  margin-bottom: 10px;
+}
+
+.rotulo .campo {
+  margin: 4px 0 0;
+}
+
+.campo-hora {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.campo-hora .campo {
+  width: auto;
+  margin: 0;
+}
+
+.botao-texto {
+  background: transparent;
+  color: var(--primaria);
+  padding: 8px 10px;
+  font-size: 14px;
+}
+
+.botao-texto:hover {
+  background: rgba(31, 111, 235, 0.08);
+}
+
+.fundo-dialogo {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 20, 28, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 50;
+}
+
+.dialogo {
+  background: var(--superficie);
+  border-radius: var(--radius);
+  border: 1px solid var(--borda);
+  padding: 18px;
+  max-width: 420px;
+  width: 100%;
+}
+
+.dialogo .acoes {
+  border-top: none;
+  padding-top: 8px;
+}
+
 /* ------- Layout de login ------- */
 .login-caixa {
   max-width: 420px;

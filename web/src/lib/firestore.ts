@@ -13,6 +13,7 @@ import {
   runTransaction,
   writeBatch,
   Timestamp,
+  deleteField,
   type DocumentSnapshot,
 } from 'firebase/firestore';
 import { obterDb } from './firebase';
@@ -25,8 +26,9 @@ import type {
   LinhaExperiencia,
   TipoCurriculo,
 } from './tipos';
+import { TipoCurriculo as TipoCurriculoEnum, ehEncerravel } from './tipos';
 import { numero } from './horario';
-import { calcularHorarios } from './agenda';
+import { calcularHorarios, paraAgenda, MINUTOS_NO_DIA } from './agenda';
 
 /**
  * Acesso ao Firestore — mesmo esquema que o aplicativo Android usa.
@@ -465,13 +467,32 @@ export function observarEntrevistas(
 
 export async function adicionarEntrevista(
   uid: string,
-  dados: Pick<Entrevista, 'nome' | 'telefone' | 'data' | 'vagaId' | 'duracaoMinutos'> & {
+  dados: Pick<Entrevista, 'nome' | 'telefone' | 'data' | 'vagaId'> & {
     curriculo?: string;
     tipoCurriculo?: TipoCurriculo;
     caminhoCurriculo?: string;
     nomeArquivoCurriculo?: string;
+    /** Horário escolhido a dedo; nulo mantém o cálculo automático da agenda. */
+    inicioMinutos?: number | null;
   },
 ): Promise<string> {
+  const nome = dados.nome.trim();
+  const telefone = dados.telefone.trim();
+  const resumo = dados.curriculo?.trim() ?? '';
+  const tipoCurriculo = dados.tipoCurriculo ?? TipoCurriculoEnum.RESUMO;
+
+  // Mesmas mensagens e mesma ordem do app (`EntrevistaRepository.adicionar`).
+  if (!nome) throw new Error('Informe o nome do candidato.');
+  if (telefone && telefone.replace(/\D/g, '').length < 10) {
+    throw new Error('Telefone incompleto — inclua o DDD.');
+  }
+  if (tipoCurriculo === TipoCurriculoEnum.RESUMO && !resumo) {
+    throw new Error('Escreva um resumo do currículo ou anexe um PDF/imagem.');
+  }
+  if (tipoCurriculo !== TipoCurriculoEnum.RESUMO && !dados.caminhoCurriculo) {
+    throw new Error('Anexe o arquivo do currículo.');
+  }
+
   const definicoes = await lerDefinicoes(uid);
   const consulta = await getDocs(colecoes(uid).entrevistas);
 
@@ -484,6 +505,17 @@ export async function adicionarEntrevista(
     throw new Error(`O dia já tem ${definicoes.quantidadePorDia} entrevistas, que é o limite definido.`);
   }
 
+  // A duração é sempre a das Definições: muda o horário, não o tempo da
+  // entrevista. Validado aqui para não gravar uma entrevista impossível.
+  if (dados.inicioMinutos !== undefined && dados.inicioMinutos !== null) {
+    if (dados.inicioMinutos < 0 || dados.inicioMinutos >= MINUTOS_NO_DIA) {
+      throw new Error('Horário inválido.');
+    }
+    if (dados.inicioMinutos + definicoes.duracaoMinutos >= MINUTOS_NO_DIA) {
+      throw new Error('A entrevista não cabe antes da meia-noite com esse horário.');
+    }
+  }
+
   const calculado = calcularHorarios(
     {
       inicioMinutos: definicoes.horarioInicioMinutos,
@@ -493,22 +525,24 @@ export async function adicionarEntrevista(
       duracaoMinutos: definicoes.duracaoMinutos,
       quantidadePorDia: definicoes.quantidadePorDia,
     },
-    [...lista, { id: 'novo', nome: dados.nome }],
+    [...lista, { id: 'novo', nome }],
   );
 
   const inicio = calculado.find((c) => c.candidato.id === 'novo');
   const id = novoId();
   await setDoc(documentos(uid).entrevista(String(id)), {
     id,
-    ...dados,
+    nome,
+    telefone,
+    data: dados.data,
     vagaId: dados.vagaId ?? null,
-    duracaoMinutos: inicio?.duracaoMinutos ?? dados.duracaoMinutos,
-    inicioMinutos: inicio?.inicioMinutos ?? 0,
+    duracaoMinutos: definicoes.duracaoMinutos,
+    inicioMinutos: dados.inicioMinutos ?? inicio?.inicioMinutos ?? 0,
     ordem: lista.length,
     status: 'AGENDADA',
-    inicioManual: false,
-    curriculo: dados.curriculo ?? '',
-    tipoCurriculo: dados.tipoCurriculo ?? 'RESUMO',
+    inicioManual: dados.inicioMinutos !== undefined && dados.inicioMinutos !== null,
+    curriculo: resumo,
+    tipoCurriculo,
     caminhoCurriculo: dados.caminhoCurriculo ?? '',
     nomeArquivoCurriculo: dados.nomeArquivoCurriculo ?? '',
     criadoEm: Timestamp.now(),
@@ -516,13 +550,105 @@ export async function adicionarEntrevista(
   return String(id);
 }
 
+/**
+ * Horário que o próximo candidato receberia se fosse salvo agora.
+ *
+ * Um candidato fictício no fim da fila revela a hora, e `null` avisa que o dia
+ * está lotado. Igual ao app (`EntrevistaRepository.proximoHorarioMinutos`).
+ */
+export async function proximoHorarioMinutos(
+  uid: string,
+  data: string,
+): Promise<number | null> {
+  const definicoes = await lerDefinicoes(uid);
+  const consulta = await getDocs(colecoes(uid).entrevistas);
+  const existentes = consulta.docs
+    .map(entrevistaDoDocumento)
+    .filter((e) => e.data === data)
+    .sort((a, b) => a.ordem - b.ordem);
+
+  const calculados = calcularHorarios(
+    paraAgenda(definicoes),
+    [...existentes.map((e) => ({ id: e.id, nome: e.nome })), { id: 'novo', nome: '' }],
+  );
+  return calculados.find((c) => c.candidato.id === 'novo')?.inicioMinutos ?? null;
+}
+
+/**
+ * Encerra de uma vez todos os candidatos do dia que já foram avaliados.
+ * Igual ao app (`EntrevistaRepository.encerrarAvaliadosDoDia`).
+ */
+export async function encerrarAvaliados(uid: string, data: string): Promise<number> {
+  const consulta = await getDocs(colecoes(uid).entrevistas);
+  const candidatos = consulta.docs
+    .map(entrevistaDoDocumento)
+    .filter((e) => e.data === data && ehEncerravel(e.status));
+  if (candidatos.length === 0) return 0;
+  await Promise.all(
+    candidatos.map((e) =>
+      updateDoc(documentos(uid).entrevista(e.id), { status: 'ENCERRADA' }),
+    ),
+  );
+  return candidatos.length;
+}
+
+/** Devolve o candidato para o horário calculado pelas Definições. */
+export async function voltarHorarioPadrao(uid: string, id: string): Promise<void> {
+  await updateDoc(documentos(uid).entrevista(id), { inicioManual: false });
+  await recalcularHorariosDoDia(uid, (await getDoc(documentos(uid).entrevista(id))).data()?.data as string);
+}
+
 /** Atualiza campos pontuais de uma entrevista (currículo, status, horários…). */
 export async function atualizarEntrevista(
   uid: string,
   id: string,
-  campos: Partial<Pick<Entrevista, 'status' | 'inicioReal' | 'fimReal' | 'curriculo' | 'tipoCurriculo' | 'caminhoCurriculo' | 'nomeArquivoCurriculo' | 'inicioManual' | 'inicioMinutos'>>,
+  campos: Partial<
+    Pick<
+      Entrevista,
+      | 'status'
+      | 'inicioReal'
+      | 'fimReal'
+      | 'curriculo'
+      | 'tipoCurriculo'
+      | 'caminhoCurriculo'
+      | 'nomeArquivoCurriculo'
+      | 'inicioManual'
+      | 'inicioMinutos'
+    >
+  >,
 ): Promise<void> {
   await updateDoc(documentos(uid).entrevista(id), campos);
+}
+
+/**
+ * Reabre a entrevista: volta para AGENDADA e apaga o registro de horário real.
+ *
+ * Igual ao app (`EntrevistaRepository.reabrir`). Os campos precisam ser apagados
+ * de verdade, e não gravados como `null`: o app limpa com "apagar", e deixar o
+ * `inicioReal` para trás faria a duração real antiga reaparecer no resumo.
+ */
+export async function reabrirEntrevista(uid: string, id: string): Promise<void> {
+  await updateDoc(documentos(uid).entrevista(id), {
+    status: 'AGENDADA',
+    inicioReal: deleteField(),
+    fimReal: deleteField(),
+  });
+}
+
+/**
+ * Grava o resumo escrito à mão do currículo.
+ *
+ * O app força `tipoCurriculo` para RESUMO ao salvar o texto
+ * (`EntrevistaRepository.salvarCurriculo`): sem o arquivo, é resumo por
+ * definição, e deixar o tipo PDF por cima faria o app tentar abrir um arquivo
+ * que já não existe.
+ */
+export async function salvarResumoCurriculo(
+  uid: string,
+  id: string,
+  curriculo: string,
+): Promise<void> {
+  await atualizarEntrevista(uid, id, { curriculo, tipoCurriculo: 'RESUMO' });
 }
 
 /**
@@ -746,6 +872,13 @@ export async function salvarResposta(
 ): Promise<void> {
   const nEntrevista = Number(entrevistaId);
   const nPergunta = Number(perguntaId);
+  // Resposta em branco não é gravada, e a que existia é apagada: é o que o app
+  // faz (`EntrevistaFormularioRepository.salvarResposta`). Gravar `texto: ''`
+  // deixaria um documento que mente dizendo que a pergunta foi respondida.
+  if (valor.trim() === '') {
+    await deleteDoc(doc(colecoes(uid).respostas, idDeResposta(nEntrevista, nPergunta)));
+    return;
+  }
   await setDoc(doc(colecoes(uid).respostas, idDeResposta(nEntrevista, nPergunta)), {
     entrevistaId: nEntrevista,
     perguntaId: nPergunta,

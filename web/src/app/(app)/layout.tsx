@@ -42,7 +42,7 @@ export default function LayoutApp({ children }: { children: React.ReactNode }) {
       <header className="cabecalho">
         <nav className="nav">
           <Link href="/agenda" className="marca">
-            Entrevistador
+            EntrevistaMais
           </Link>
           {ITENS.map((item) => (
             <Link

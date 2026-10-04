@@ -7,8 +7,8 @@ import type { MetadataRoute } from 'next';
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'Entrevistador',
-    short_name: 'Entrevistador',
+    name: 'EntrevistaMais',
+    short_name: 'EntrevistaMais',
     description: 'Agenda de entrevistas para recrutadores.',
     start_url: '/',
     display: 'standalone',

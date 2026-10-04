@@ -19,6 +19,15 @@ export const StatusEntrevista = {
 
 export type StatusEntrevista = (typeof StatusEntrevista)[keyof typeof StatusEntrevista];
 
+/** Verdadeiro quando a entrevista já passou por decisão do recrutador. */
+export const ehDecidido = (status: StatusEntrevista) =>
+  status === StatusEntrevista.APROVADO || status === StatusEntrevista.REPROVADO;
+
+/** Verdadeiro quando o candidato já foi avaliado e pode ser encerrado. */
+export const ehEncerravel = (status: StatusEntrevista) =>
+  status === StatusEntrevista.CONCLUIDA || ehDecidido(status);
+
+/** Mesmos rótulos do enum do app, usados em toda a interface. */
 export const ROTULO_STATUS: Record<StatusEntrevista, string> = {
   AGENDADA: 'Agendada',
   EM_ANDAMENTO: 'Em andamento',
@@ -58,13 +67,23 @@ export const FINALIZADOS: StatusEntrevista[] = [
   StatusEntrevista.ENCERRADA,
 ];
 
-export const ehFinalizado = (status: StatusEntrevista) => FINALIZADOS.includes(status);
+/**
+ * Verdadeiro quando a entrevista já terminou de algum jeito.
+ *
+ * Mesmo regra do app (`StatusEntrevista.finalizada`): cancelada e não compareceu
+ * também são "terminadas" e por isso não aceitam mais iniciar — só reabrir.
+ * Sem isto, o site tratava esses dois status como se ainda pudessem começar.
+ */
+export const ehFinalizado = (status: StatusEntrevista) =>
+  status !== StatusEntrevista.AGENDADA && status !== StatusEntrevista.EM_ANDAMENTO;
 
 export const TipoResposta = {
   TEXTO: 'TEXTO',
   TEXTO_LONGO: 'TEXTO_LONGO',
   NUMERO: 'NUMERO',
   SIM_NAO: 'SIM_NAO',
+  DATA: 'DATA',
+  AUTOMATICO: 'AUTOMATICO',
   SECAO: 'SECAO',
   TABELA_EXPERIENCIAS: 'TABELA_EXPERIENCIAS',
 } as const;
@@ -76,6 +95,8 @@ export const ROTULO_TIPO: Record<TipoResposta, string> = {
   TEXTO_LONGO: 'Texto longo',
   NUMERO: 'Número',
   SIM_NAO: 'Sim/Não',
+  DATA: 'Data',
+  AUTOMATICO: 'Automático',
   SECAO: 'Seção',
   TABELA_EXPERIENCIAS: 'Tabela de locais',
 };
@@ -144,6 +165,9 @@ export interface Entrevista {
   /** Preenchido ao iniciar (cronômetro) e ao concluir (duração real). */
   inicioReal: number | null;
   fimReal: number | null;
+  /** Campos que o app já gravava e o site precisa ler para não perder dado. */
+  respostasRoteiro: string;
+  notas: string;
   criadoEm: number;
 }
 

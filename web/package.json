@@ -2,7 +2,7 @@
   "name": "entrevistador-web",
   "version": "1.0.0",
   "private": true,
-  "description": "Versão web do Entrevistador. Mesma base de dados (Firebase) do aplicativo Android.",
+  "description": "Versão web do EntrevistaMais. Mesma base de dados (Firebase) do aplicativo Android.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
