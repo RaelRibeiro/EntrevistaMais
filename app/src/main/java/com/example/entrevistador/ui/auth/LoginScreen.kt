@@ -9,9 +9,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -33,6 +35,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -155,12 +158,15 @@ fun CriarContaScreen(
         modifier = modifier,
         snackbarHost = { SnackbarHost(snackbarHost) },
     ) { padding ->
+        // Teclado vira espaço rolável no fim, em vez de encolher a janela: com
+        // `imePadding()` aqui a tela redimensionava a cada tecla e tremia.
+        val espacoDoTeclado =
+            with(LocalDensity.current) { WindowInsets.ime.getBottom(this).toDp() }
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .imePadding()
                 .padding(horizontal = 24.dp, vertical = 24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -244,7 +250,7 @@ private fun Cabecalho() {
             modifier = Modifier.size(56.dp),
         )
         Text(
-            text = "Entrevistador",
+            text = "EntrevistaMais",
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(top = 12.dp),

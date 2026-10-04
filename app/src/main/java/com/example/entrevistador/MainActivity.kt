@@ -41,7 +41,7 @@ import com.example.entrevistador.ui.navigation.abrirEntrevista
 import com.example.entrevistador.ui.navigation.navegarPara
 import com.example.entrevistador.ui.roteiro.RoteiroScreen
 import com.example.entrevistador.ui.roteiro.RoteiroViewModel
-import com.example.entrevistador.ui.theme.EntrevistadorTheme
+import com.example.entrevistador.ui.theme.EntrevistaMaisTheme
 import com.example.entrevistador.ui.vagas.VagaScreen
 import com.example.entrevistador.ui.vagas.VagaViewModel
 
@@ -51,8 +51,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            EntrevistadorTheme {
-                AppEntrevistador(container = (application as EntrevistadorApplication).container)
+            EntrevistaMaisTheme {
+                AppEntrevistaMais(container = (application as EntrevistaMaisApplication).container)
             }
         }
     }
@@ -67,7 +67,7 @@ class MainActivity : ComponentActivity() {
  * primeiro acesso à sessão, que é rápido mas assíncrono.
  */
 @Composable
-fun AppEntrevistador(container: AppContainer) {
+fun AppEntrevistaMais(container: AppContainer) {
     val usuario by container.authRepository.usuarioAtual.collectAsStateWithLifecycle(
         initialValue = Carregando,
     )

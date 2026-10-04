@@ -66,7 +66,7 @@ private val Escuro = darkColorScheme(
 )
 
 @Composable
-fun EntrevistadorTheme(
+fun EntrevistaMaisTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit,

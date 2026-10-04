@@ -34,6 +34,17 @@ enum class StatusEntrevista(val rotulo: String) {
     val encerravel: Boolean
         get() = this == CONCLUIDA || decidido
 
+    /**
+     * Verdadeiro quando a entrevista já terminou de algum jeito.
+     *
+     * Serve para decidir o que a tela da entrevista oferece. Uma entrevista
+     * encerrada ou cancelada já passou pelo recrutador, então precisa mostrar o
+     * resumo e o botão de reabrir — e não o de iniciar, que só faz sentido
+     * para quem ainda não começou.
+     */
+    val finalizada: Boolean
+        get() = this != AGENDADA && this != EM_ANDAMENTO
+
     companion object {
         fun from(valor: String): StatusEntrevista =
             entries.firstOrNull { it.name == valor } ?: AGENDADA

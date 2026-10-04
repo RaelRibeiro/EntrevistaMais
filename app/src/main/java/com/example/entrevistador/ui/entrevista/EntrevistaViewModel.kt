@@ -235,6 +235,28 @@ class EntrevistaViewModel(
         entrevistaRepository.encerrar(it)
     }
 
+    /**
+     * Reabre um candidato encerrado ou já avaliado: volta a ficar agendado e
+     * editável, para refazer a entrevista sem recriar o candidato.
+     */
+    fun reabrir() {
+        val entrevista = _estado.value.entrevista ?: return
+        viewModelScope.launch {
+            _estado.update {
+                when (val resultado = entrevistaRepository.reabrir(entrevista.id)) {
+                    is EntrevistaRepository.Resultado.Erro -> it.copy(mensagem = resultado.mensagem)
+                    else -> it.copy(
+                        entrevista = entrevistaRepository.buscarPorId(entrevista.id),
+                        emAndamento = false,
+                        decorridoMs = 0L,
+                        tempoExcedido = false,
+                        mensagem = "Candidato reaberto. Pode ajustar as respostas e iniciar de novo.",
+                    )
+                }
+            }
+        }
+    }
+
     private fun decidir(mensagemDeSucesso: String, bloco: suspend (Long) -> EntrevistaRepository.Resultado) {
         val entrevista = _estado.value.entrevista ?: return
         viewModelScope.launch {

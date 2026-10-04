@@ -42,8 +42,8 @@ android {
         applicationId = "com.example.entrevistador"
         minSdk = 24
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 4
+        versionName = "1.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -60,6 +60,14 @@ android {
             storePassword = keystoreProperties["keystorePassword"]
             keyAlias = keystoreProperties["keyAlias"]
             keyPassword = keystoreProperties["keyPassword"]
+            // v1 assina apenas a parte do ZIP do APK, formato mais antigo em
+            // que o Android instala com menos verificação. Assinar as três
+            // versões (v1+v2+v3) entrega ao instalador o mesmo formato de um
+            // app publicado no Google Play, e é um dos pontos que o Play
+            // Protect olha ao exibir o aviso de "app perigoso".
+            enableV1Signing = true
+            enableV2Signing = true
+            enableV3Signing = true
         }
     }
 

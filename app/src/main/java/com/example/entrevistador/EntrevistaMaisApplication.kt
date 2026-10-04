@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
-class EntrevistadorApplication : Application() {
+class EntrevistaMaisApplication : Application() {
 
     lateinit var container: AppContainer
         private set

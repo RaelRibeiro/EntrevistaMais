@@ -52,6 +52,14 @@ data class EstadoAgenda(
     val mostrarEncerradas: Boolean = false,
     /** Candidatos encerrados do dia, escondidos enquanto o toggle está desligado. */
     val encerradas: List<Entrevista> = emptyList(),
+    /**
+     * Horário que o seletor mostra ao abrir o formulário: é o horário que a
+     * agenda calculou para este candidato. Vira [hora] se o recrutador mexer.
+     */
+    val hora: Int = 8,
+    val minuto: Int = 0,
+    /** Verdadeiro quando o horário foi escolhido a dedo e não é o calculado. */
+    val horarioManual: Boolean = false,
 ) {
     /**
      * Encerrar libera o horário para outro candidato, mas não apaga o registro:
@@ -132,6 +140,9 @@ class AgendaViewModel(
             salvando = formulario.salvando,
             mostrarEncerradas = mostrarEncerradas,
             encerradas = ordenadas.filter { it.status == StatusEntrevista.ENCERRADA },
+            hora = formulario.hora,
+            minuto = formulario.minuto,
+            horarioManual = formulario.horarioManual,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), EstadoAgenda())
 
@@ -153,10 +164,42 @@ class AgendaViewModel(
 
     fun alternarEncerradas() = _mostrarEncerradas.update { !it }
 
-    fun abrirFormulario() = _formulario.update { it.copy(aberto = true) }
+    fun abrirFormulario() = viewModelScope.launch {
+        // O seletor de hora já abre com o valor que a agenda calcula para este
+        // candidato: mexer só é preciso quando o horário tem de ser diferente.
+        val padrao = entrevistaRepository.proximoHorarioMinutos(_data.value)
+        _formulario.update {
+            it.copy(
+                aberto = true,
+                hora = (padrao / 60).coerceIn(0, 23),
+                minuto = (padrao % 60).coerceIn(0, 59),
+                horarioManual = false,
+            )
+        }
+    }
 
     fun fecharFormulario() {
         _formulario.value = Formulario()
+    }
+
+    fun aoAlterarHoraDoCandidato(valor: Int) = _formulario.update {
+        it.copy(hora = valor.coerceIn(0, 23), horarioManual = true)
+    }
+
+    fun aoAlterarMinutoDoCandidato(valor: Int) = _formulario.update {
+        it.copy(minuto = valor.coerceIn(0, 59), horarioManual = true)
+    }
+
+    /** Devolve o seletor para o horário que a agenda teria calculado. */
+    fun aoVoltarAoHorarioCalculado() = viewModelScope.launch {
+        val padrao = entrevistaRepository.proximoHorarioMinutos(_data.value)
+        _formulario.update {
+            it.copy(
+                hora = (padrao / 60).coerceIn(0, 23),
+                minuto = (padrao % 60).coerceIn(0, 59),
+                horarioManual = false,
+            )
+        }
     }
 
     fun aoAlterarNome(valor: String) = _formulario.update {
@@ -228,11 +271,22 @@ class AgendaViewModel(
                 caminhoCurriculo = formulario.caminhoArquivo,
                 nomeArquivoCurriculo = formulario.nomeArquivo,
                 vagaId = formulario.vagaId,
+                // Só grava o horário escolhido; sem isso, a agenda continua
+                // calculando a hora pela ordem do dia.
+                inicioMinutos = if (formulario.horarioManual) {
+                    formulario.hora * 60 + formulario.minuto
+                } else {
+                    null
+                },
             )
             when (resultado) {
                 is EntrevistaRepository.Resultado.Sucesso -> {
                     _formulario.value = Formulario()
-                    _mensagem.value = "Candidato adicionado e horário reservado automaticamente."
+                    _mensagem.value = if (formulario.horarioManual) {
+                        "Candidato adicionado com o horário escolhido."
+                    } else {
+                        "Candidato adicionado e horário reservado automaticamente."
+                    }
                 }
 
                 is EntrevistaRepository.Resultado.Erro ->
@@ -398,5 +452,9 @@ class AgendaViewModel(
         val erroNome: String? = null,
         val erroGeral: String? = null,
         val salvando: Boolean = false,
+        /** Horário exibido no seletor; só é gravado se [horarioManual] for true. */
+        val hora: Int = 8,
+        val minuto: Int = 0,
+        val horarioManual: Boolean = false,
     )
 }

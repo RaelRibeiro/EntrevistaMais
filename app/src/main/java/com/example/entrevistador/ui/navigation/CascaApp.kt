@@ -38,7 +38,7 @@ fun CascaApp(
             TopAppBar(
                 title = {
                     Text(
-                        text = nomeUsuario.ifBlank { "Entrevistador" },
+                        text = nomeUsuario.ifBlank { "EntrevistaMais" },
                         style = MaterialTheme.typography.titleLarge,
                     )
                 },

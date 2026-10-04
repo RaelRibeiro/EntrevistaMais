@@ -8,6 +8,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.UserProfileChangeRequest
+import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -108,11 +109,21 @@ class FirebaseAuthRepository(
      *
      * É a mesma estrutura que o site usa — é o que liga os dados dos dois
      * produtos sob a mesma conta.
+     *
+     * Usa `merge` de propósito: um `set` sem opções sobrescreveria o documento
+     * inteiro e apagaria campos que o site grava, como o `criadoEm`. E um
+     * campo só é enviado quando tem valor, porque muita conta antiga foi criada
+     * fora do app e não tem nome de exibição — sobrescrever o nome com vazio
+     * apagaria o nome que o usuário já tinha.
      */
     private suspend fun gravarPerfil(nome: String, email: String) {
         val uid = auth.currentUser?.uid ?: return
+        val campos = mutableMapOf<String, Any>()
+        if (nome.isNotBlank()) campos["nome"] = nome.trim()
+        if (email.isNotBlank()) campos["email"] = email.trim()
+
         firestore.collection("usuarios").document(uid)
-            .set(mapOf("nome" to nome, "email" to email))
+            .set(campos, SetOptions.merge())
             .await()
     }
 }

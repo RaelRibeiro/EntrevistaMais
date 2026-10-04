@@ -33,7 +33,7 @@ import com.example.entrevistador.data.local.entity.VagaEntity
     exportSchema = false,
 )
 @TypeConverters(Converters::class)
-abstract class EntrevistadorDatabase : RoomDatabase() {
+abstract class EntrevistaMaisDatabase : RoomDatabase() {
 
     abstract fun entrevistaDao(): EntrevistaDao
     abstract fun roteiroDao(): RoteiroDao
@@ -43,18 +43,21 @@ abstract class EntrevistadorDatabase : RoomDatabase() {
     abstract fun vagaDao(): VagaDao
 
     companion object {
+        // O nome do arquivo segue "entrevistador" de propósito: trocar isso
+        // faria o Room tratar como um banco novo e apagaria os roteiros e
+        // rascunhos que já estão no aparelho de quem atualiza o app.
         private const val NOME = "entrevistador.db"
 
         @Volatile
-        private var instancia: EntrevistadorDatabase? = null
+        private var instancia: EntrevistaMaisDatabase? = null
 
-        fun obter(context: Context): EntrevistadorDatabase =
+        fun obter(context: Context): EntrevistaMaisDatabase =
             instancia ?: synchronized(this) {
                 instancia ?: criar(context.applicationContext).also { instancia = it }
             }
 
-        private fun criar(context: Context): EntrevistadorDatabase =
-            Room.databaseBuilder(context, EntrevistadorDatabase::class.java, NOME)
+        private fun criar(context: Context): EntrevistaMaisDatabase =
+            Room.databaseBuilder(context, EntrevistaMaisDatabase::class.java, NOME)
                 .addMigrations(MIGRACAO_1_2, MIGRACAO_2_3, MIGRACAO_3_4)
                 .build()
 

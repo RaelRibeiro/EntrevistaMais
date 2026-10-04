@@ -115,9 +115,13 @@ class CurriculoPaginasRepository(
                 // Uma página por vez: manter todas abertas de uma vez estoura a
                 // memória em currículo com muitas páginas.
                 renderizador.openPage(indice).use { pagina ->
+                    val largura = pagina.width.coerceAtLeast(1)
+                    val altura = pagina.height.coerceAtLeast(1)
+                    val escala = escalaDe(largura, altura)
+
                     val bitmap = Bitmap.createBitmap(
-                        pagina.width.coerceAtLeast(1),
-                        pagina.height.coerceAtLeast(1),
+                        (largura * escala).toInt().coerceAtLeast(1),
+                        (altura * escala).toInt().coerceAtLeast(1),
                         Bitmap.Config.ARGB_8888,
                     )
                     // Fundo branco: o PDF é transparente por padrão e apareceria
@@ -135,6 +139,24 @@ class CurriculoPaginasRepository(
             }
             return Resultado.Paginas(caminhos)
         }
+    }
+
+    /**
+     * Quanto ampliar a página ao desenhar.
+     *
+     * O [PdfRenderer] entrega a página no tamanho em que o PDF foi salvo, que
+     * costuma ser 72 dpi — muito menor que a tela do celular. Desenhar nesse
+     * tamanho e depois esticar para a largura da tela deixa o texto borrado,
+     * então a página é desenhada já no tamanho em que vai ser vista.
+     */
+    private fun escalaDe(largura: Int, altura: Int): Float {
+        val larguraDaTela = context.resources.displayMetrics.widthPixels.toFloat()
+        val escala = larguraDaTela / largura
+
+        // Acima disso a memória vai embora antes do ganho aparecer: uma página
+        // A4 ampliada 4x já passa de 30 MB em bitmap.
+        val teto = (PIXELS_MAXIMOS / (largura.toLong() * altura)).toFloat()
+        return escala.coerceIn(1f, minOf(ESCALA_MAXIMA, teto))
     }
 
     private fun paginasExistentes(pastaDoArquivo: File): List<String> {
@@ -167,10 +189,22 @@ class CurriculoPaginasRepository(
     }
 
     companion object {
-        private const val PASTA = "paginas_curriculo"
+        /**
+         * O sufixo entra no nome da pasta porque a forma de renderizar mudou:
+         * as imagens antigas foram desenhadas no tamanho do PDF e ficavam
+         * borradas. Trocar o nome do cache faz o app refazer as páginas na
+         * qualidade certa em vez de reaproveitar as antigas já baixadas.
+         */
+        private const val PASTA = "paginas_curriculo_v2"
         private const val EXTENSAO = "jpg"
-        private const val QUALIDADE = 90
+        private const val QUALIDADE = 92
         private const val PDF = ".pdf"
         private val INVALIDOS = Regex("[^A-Za-z0-9._-]")
+
+        /** Ampliação máxima ao desenhar a página (2,5x o tamanho do PDF). */
+        private const val ESCALA_MAXIMA = 2.5f
+
+        /** Teto de pixels por página, para não estourar a memória do aparelho. */
+        private const val PIXELS_MAXIMOS = 8_000_000L
     }
 }

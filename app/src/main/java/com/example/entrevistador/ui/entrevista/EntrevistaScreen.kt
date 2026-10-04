@@ -10,10 +10,13 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -61,6 +64,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -155,12 +159,18 @@ fun EntrevistaScreen(
             return@Scaffold
         }
 
+        val densidade = LocalDensity.current
+        // O teclado vira espaço rolável no fim da lista em vez de encolher a
+        // janela. Com `imePadding()` no container, cada tecla digitada
+        // redimensionava a área visível e o campo sob o cursor era rolado de
+        // novo pelo Compose: a tela "balançava" enquanto se digitava.
+        val espacoDoTeclado = with(densidade) { WindowInsets.ime.getBottom(this).toDp() }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .imePadding()
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
@@ -174,31 +184,33 @@ fun EntrevistaScreen(
                 )
             }
 
-            // "encerrável" cobre concluída, aprovada, reprovada e encerrada: em
-            // todos esses casos a entrevista já aconteceu e não faz sentido
-            // oferecer o botão de começar de novo.
-            if (!estado.emAndamento && !entrevista.status.encerravel) {
+            // "finalizada" cobre concluída, aprovada, reprovada, encerrada,
+            // cancelada e não compareceu: em todos esses casos a entrevista já
+            // aconteceu, e a tela oferece o resumo com a opção de reabrir em
+            // vez do botão de começar.
+            if (!estado.emAndamento && !entrevista.status.finalizada) {
                 BotaoIniciar(
                     aoClicar = viewModel::iniciar,
                     modifier = Modifier.fillMaxWidth(),
                 )
-            } else if (entrevista.status.encerravel) {
+            } else if (entrevista.status.finalizada) {
                 ResumoFinalizado(
                     entrevista = entrevista,
                     aoAprovar = { viewModel.aprovar() },
                     aoReprovar = { viewModel.reprovar() },
                     aoEncerrar = { viewModel.encerrar() },
+                    aoReabrir = { viewModel.reabrir() },
                 )
             }
 
             ToggleAba(
                 aba = estado.aba,
                 aoTrocar = viewModel::trocarAba,
-                habilitada = estado.emAndamento || entrevista.status.encerravel,
+                habilitada = estado.emAndamento || entrevista.status.finalizada,
             )
 
             when {
-                !estado.emAndamento && !entrevista.status.encerravel ->
+                !estado.emAndamento && !entrevista.status.finalizada ->
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(
@@ -257,6 +269,10 @@ fun EntrevistaScreen(
                     Text("Finalizar entrevista", modifier = Modifier.padding(start = 8.dp))
                 }
             }
+
+            // Respiro para o teclado: o último campo continua alcançável pelo
+            // scroll, sem precisar encolher a janela a cada tecla.
+            Spacer(Modifier.height(espacoDoTeclado))
         }
     }
 
@@ -432,6 +448,7 @@ private fun ResumoFinalizado(
     aoAprovar: () -> Unit,
     aoReprovar: () -> Unit,
     aoEncerrar: () -> Unit,
+    aoReabrir: () -> Unit,
 ) {
     val duracao = entrevista.duracaoRealMs
     val status = entrevista.status
@@ -489,11 +506,25 @@ private fun ResumoFinalizado(
             Text(
                 text = when {
                     encerrada -> "O registro, as respostas e o currículo continuam guardados. " +
-                        "Use Ver encerrados na agenda para reabrir."
-                    status.decidido -> "Você pode trocar a decisão, encerrar ou voltar a editar a qualquer momento."
+                        "Para refazer a entrevista, use Reabrir."
+                    status.decidido -> "Você pode trocar a decisão, encerrar ou reabrir a qualquer momento."
                     else -> "Você pode aprovar, reprovar ou encerrar este candidato."
                 },
                 style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            // Reabrir devolve o candidato para agendado, editável e pronto para
+            // começar de novo. Sem isto, a única forma de voltar atrás era
+            // iniciar de novo, o que zera as respostas sem avisar.
+            TextButton(
+                onClick = aoReabrir,
+                modifier = Modifier.padding(top = 8.dp),
+            ) { Text("Reabrir candidato") }
+
+            Text(
+                text = "As respostas e o currículo já preenchidos são mantidos.",
+                style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -818,7 +849,7 @@ private fun OpcoesSimNao(
             modifier = Modifier.padding(top = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            listOf("Sim", "Não", "Talvez").forEach { opcao ->
+            listOf("Sim", "Não").forEach { opcao ->
                 FilterChip(
                     selected = selecionado.equals(opcao, ignoreCase = true),
                     onClick = { aoSelecionar(opcao) },
@@ -833,6 +864,10 @@ private fun OpcoesSimNao(
 /**
  * Mini tabela "locais onde trabalhou": Local, Ano, Duração, Cargo e Motivo da
  * saída. Uma linha por emprego, com o botão de adicionar no fim.
+ *
+ * Cada emprego vira um cartão com os campos empilhados e rotulados, em vez de
+ * uma linha com cinco colunas: numa tela de celular as colunas ficavam com
+ * poucos pixels de largura e o texto aparecia cortado ("só umas letras jogadas").
  */
 @Composable
 private fun TabelaExperiencias(
@@ -843,9 +878,8 @@ private fun TabelaExperiencias(
     somenteLeitura: Boolean = false,
 ) {
     CartaoSecao(titulo = "Locais onde trabalhou") {
-        CabecalhoTabela()
         estado.experiencias.forEachIndexed { indice, linha ->
-            LinhaTabela(
+            CartaoLinhaTabela(
                 indice = indice,
                 linha = linha,
                 podeRemover = !somenteLeitura && estado.experiencias.size > 1,
@@ -863,34 +897,9 @@ private fun TabelaExperiencias(
     }
 }
 
+/** Um emprego: campos empilhados, com o rótulo sempre visível acima do valor. */
 @Composable
-private fun CabecalhoTabela() {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.shapes.small)
-            .padding(horizontal = 8.dp, vertical = 6.dp),
-    ) {
-        Cabecalho("Local", 2f)
-        Cabecalho("Ano", 0.8f)
-        Cabecalho("Duração", 1f)
-        Cabecalho("Cargo", 1.3f)
-        Cabecalho("Motivo da saída", 1.6f)
-    }
-}
-
-@Composable
-private fun RowScope.Cabecalho(texto: String, peso: Float) {
-    Text(
-        text = texto,
-        style = MaterialTheme.typography.labelSmall,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier.weight(peso),
-    )
-}
-
-@Composable
-private fun LinhaTabela(
+private fun CartaoLinhaTabela(
     indice: Int,
     linha: LinhaExperiencia,
     podeRemover: Boolean,
@@ -898,43 +907,101 @@ private fun LinhaTabela(
     aoRemover: (Int) -> Unit,
     somenteLeitura: Boolean = false,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
-        Celula(linha.local, 2f, somenteLeitura) { aoAlterar(indice, linha.copy(local = it)) }
-        Celula(linha.ano, 0.8f, somenteLeitura) { aoAlterar(indice, linha.copy(ano = it)) }
-        Celula(linha.duracao, 1f, somenteLeitura) { aoAlterar(indice, linha.copy(duracao = it)) }
-        Celula(linha.cargo, 1.3f, somenteLeitura) { aoAlterar(indice, linha.copy(cargo = it)) }
-        Celula(linha.motivoSaida, 1.6f, somenteLeitura) { aoAlterar(indice, linha.copy(motivoSaida = it)) }
-        if (podeRemover) {
-            IconButton(onClick = { aoRemover(indice) }, modifier = Modifier.size(32.dp)) {
-                Icon(
-                    imageVector = Icons.Filled.Delete,
-                    contentDescription = "Remover linha",
-                    modifier = Modifier.size(18.dp),
-                )
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            // Local e Ano dividem a largura porque os dois são curtos; Cargo e
+            // Motivo da saída ficam inteiros na linha de baixo, que é o campo
+            // que mais sofria com o espremimento.
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Celula(
+                    valor = linha.local,
+                    rotulo = "Local",
+                    peso = 2f,
+                    somenteLeitura = somenteLeitura,
+                    modifier = Modifier.weight(2f),
+                ) { aoAlterar(indice, linha.copy(local = it)) }
+                Celula(
+                    valor = linha.ano,
+                    rotulo = "Ano",
+                    peso = 1f,
+                    somenteLeitura = somenteLeitura,
+                    modifier = Modifier.weight(1f),
+                ) { aoAlterar(indice, linha.copy(ano = it)) }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Celula(
+                    valor = linha.cargo,
+                    rotulo = "Cargo",
+                    peso = 1.3f,
+                    somenteLeitura = somenteLeitura,
+                    modifier = Modifier.weight(1.3f),
+                ) { aoAlterar(indice, linha.copy(cargo = it)) }
+                Celula(
+                    valor = linha.duracao,
+                    rotulo = "Duração",
+                    peso = 1f,
+                    somenteLeitura = somenteLeitura,
+                    modifier = Modifier.weight(1f),
+                ) { aoAlterar(indice, linha.copy(duracao = it)) }
+            }
+            Celula(
+                valor = linha.motivoSaida,
+                rotulo = "Motivo da saída",
+                peso = 1f,
+                somenteLeitura = somenteLeitura,
+                modifier = Modifier.fillMaxWidth(),
+                multilinha = true,
+            ) { aoAlterar(indice, linha.copy(motivoSaida = it)) }
+
+            if (podeRemover) {
+                TextButton(onClick = { aoRemover(indice) }) {
+                    Icon(
+                        imageVector = Icons.Filled.Delete,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Text("Remover local", modifier = Modifier.padding(start = 4.dp))
+                }
             }
         }
     }
 }
 
 @Composable
-private fun RowScope.Celula(
+private fun Celula(
     valor: String,
+    rotulo: String,
     peso: Float,
+    modifier: Modifier = Modifier,
     somenteLeitura: Boolean = false,
+    multilinha: Boolean = false,
     aoAlterar: (String) -> Unit,
 ) {
-    OutlinedTextField(
-        value = valor,
-        onValueChange = aoAlterar,
-        readOnly = somenteLeitura,
-        singleLine = true,
-        textStyle = MaterialTheme.typography.bodySmall,
-        modifier = Modifier.weight(peso),
-    )
+    Column(modifier = modifier) {
+        Text(
+            text = rotulo,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.Bold,
+        )
+        OutlinedTextField(
+            value = valor,
+            onValueChange = aoAlterar,
+            readOnly = somenteLeitura,
+            singleLine = !multilinha,
+            minLines = 1,
+            textStyle = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
 }

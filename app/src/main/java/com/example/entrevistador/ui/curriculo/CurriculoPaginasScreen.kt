@@ -2,10 +2,10 @@ package com.example.entrevistador.ui.curriculo
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
@@ -51,7 +51,8 @@ import kotlinx.coroutines.launch
 
 /**
  * Zoom máximo. Acima disso a imagem perde nitidez e o recrutador só se perde.
- * Um toque vai para 2x, o duplo toque vai para o máximo.
+ * O zoom é feito com dois dedos; para voltar ao tamanho normal, dá para
+ * pinçar fechando os dedos de novo.
  */
 private const val ZOOM_MAXIMO = 6f
 
@@ -110,15 +111,30 @@ fun CurriculoPaginasScreen(
     }
 }
 
-/** Todas as páginas lado a lado, com rolagem e zoom por pinch. */
+/**
+ * Todas as páginas lado a lado, com rolagem e zoom por pinch.
+ *
+ * A rolagem entre páginas só é liberada quando a página atual está no tamanho
+ * normal. Com a página ampliada o arrasto precisa mover o currículo, e não
+ * trocar de página — senão dar zoom em um currículo de três páginas impediria
+ * justamente de chegar à segunda.
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun PaginasZoom(caminhos: List<String>) {
     val pager = rememberPagerState(pageCount = { caminhos.size })
+    var paginaAmpliada by remember { mutableStateOf(false) }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        HorizontalPager(state = pager, modifier = Modifier.fillMaxSize()) { pagina ->
-            PaginaComZoom(caminhos[pagina])
+        HorizontalPager(
+            state = pager,
+            modifier = Modifier.fillMaxSize(),
+            userScrollEnabled = !paginaAmpliada,
+        ) { pagina ->
+            PaginaComZoom(
+                caminho = caminhos[pagina],
+                aoAmpliar = { paginaAmpliada = it },
+            )
         }
 
         // O contador fica sobre a página: o currículo é o que importa aqui.
@@ -140,12 +156,12 @@ private fun PaginasZoom(caminhos: List<String>) {
 /**
  * Uma página, que abre ocupando a tela e dá zoom por pinch.
  *
- * Começa ajustada à largura da tela. Um toque alterna entre o tamanho
- * ajustado e o tamanho real, que é o que o recrutador quer quando quer ler
- * o texto pequeno sem pinçar.
+ * O zoom é só por pinça (dois dedos, abrindo e fechando), como se faz em
+ * qualquer leitor de PDF. No tamanho normal a página aparece inteira; ao
+ * ampliar, ela passa a ser arrastada até onde o recrutador precisar ler.
  */
 @Composable
-private fun PaginaComZoom(caminho: String) {
+private fun PaginaComZoom(caminho: String, aoAmpliar: (Boolean) -> Unit) {
     val bitmap = remember(caminho) { BitmapFactory.decodeFile(caminho) }
 
     if (bitmap == null) {
@@ -156,41 +172,44 @@ private fun PaginaComZoom(caminho: String) {
     var zoom by remember(caminho) { mutableFloatStateOf(1f) }
     var deslocamento by remember(caminho) { mutableStateOf(Offset.Zero) }
 
-    Box(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
-            .pointerInput(caminho) {
-                detectTransformGestures { _, pan, _, escala ->
-                    zoom = (zoom * escala).coerceIn(1f, ZOOM_MAXIMO)
-                    // Arrastar só faz sentido com a página ampliada; no tamanho
-                    // ajustado o pan puxaria a imagem para fora da tela.
-                    if (zoom > 1f) {
-                        deslocamento += pan
-                    }
-                }
-            }
-            .pointerInput(caminho) {
-                detectTapGestures(
-                    onDoubleTap = {
-                        if (zoom > 1f) {
-                            zoom = 1f
-                            deslocamento = Offset.Zero
-                        } else {
-                            zoom = ZOOM_MAXIMO
-                        }
-                    },
-                    onTap = {
-                        if (zoom > 1f) {
-                            zoom = 1f
-                            deslocamento = Offset.Zero
-                        } else {
-                            zoom = 2f
+            .then(
+                // No tamanho normal este bloco não existe: com ele, o
+                // detectTransformGestures engole o arrasto do dedo e a troca de
+                // página deixa de funcionar. Só com a página ampliada ele entra,
+                // e aí quem recebe o arrasto é a própria página.
+                if (zoom > 1f) {
+                    Modifier.pointerInput(caminho) {
+                        detectTransformGestures { _, pan, _, escala ->
+                            zoom = (zoom * escala).coerceIn(1f, ZOOM_MAXIMO)
+                            // O pan é o movimento do centro da pinça: num gesto
+                            // de dois dedos ele já é o arrasto da página, e num
+                            // gesto de um dedo é o arrasto que o recrutador quer.
+                            deslocamento += pan
                         }
                     }
-                )
-            },
+                } else {
+                    Modifier
+                },
+            ),
         contentAlignment = Alignment.Center,
     ) {
+        // Com a imagem ajustada à tela, quanto maior o zoom mais ela cresce
+        // para fora dos limites; o deslocamento é limitado a essa sobra para
+        // o currículo não poder ser arrastado para fora da vista.
+        val larguraVisivel = constraints.maxWidth.toFloat()
+        val alturaVisivel = constraints.maxHeight.toFloat()
+        val escalaConteudo = minOf(
+            larguraVisivel / bitmap.width,
+            alturaVisivel / bitmap.height,
+        )
+        val sobraX = ((bitmap.width * escalaConteudo * zoom - larguraVisivel) / 2f)
+            .coerceAtLeast(0f)
+        val sobraY = ((bitmap.height * escalaConteudo * zoom - alturaVisivel) / 2f)
+            .coerceAtLeast(0f)
+
         Image(
             bitmap = bitmap.asImageBitmap(),
             contentDescription = null,
@@ -200,10 +219,17 @@ private fun PaginaComZoom(caminho: String) {
                 .graphicsLayer {
                     scaleX = zoom
                     scaleY = zoom
-                    translationX = deslocamento.x
-                    translationY = deslocamento.y
+                    translationX = deslocamento.x.coerceIn(-sobraX, sobraX)
+                    translationY = deslocamento.y.coerceIn(-sobraY, sobraY)
                 },
         )
+    }
+
+    // Ao voltar ao tamanho normal o deslocamento antigo ficaria pendurado, e a
+    // próxima pinça recomeçaria de onde a última parou em vez do centro.
+    LaunchedEffect(zoom) {
+        if (zoom <= 1f) deslocamento = Offset.Zero
+        aoAmpliar(zoom > 1f)
     }
 }
 

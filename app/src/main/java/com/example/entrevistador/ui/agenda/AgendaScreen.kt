@@ -229,6 +229,9 @@ fun AgendaScreen(
             aoSelecionarArquivo = viewModel::aoSelecionarArquivo,
             aoRemoverArquivo = viewModel::aoRemoverArquivo,
             aoSelecionarVaga = viewModel::aoSelecionarVaga,
+            aoAlterarHora = viewModel::aoAlterarHoraDoCandidato,
+            aoAlterarMinuto = viewModel::aoAlterarMinutoDoCandidato,
+            aoVoltarAoHorarioCalculado = viewModel::aoVoltarAoHorarioCalculado,
             aoSalvar = viewModel::adicionarCandidato,
             aoFechar = viewModel::fecharFormulario,
         )
@@ -843,6 +846,9 @@ private fun DialogoAdicionarCandidato(
     aoSelecionarArquivo: (android.net.Uri) -> Unit,
     aoRemoverArquivo: () -> Unit,
     aoSelecionarVaga: (Long?) -> Unit,
+    aoAlterarHora: (Int) -> Unit,
+    aoAlterarMinuto: (Int) -> Unit,
+    aoVoltarAoHorarioCalculado: () -> Unit,
     aoSalvar: () -> Unit,
     aoFechar: () -> Unit,
 ) {
@@ -859,10 +865,32 @@ private fun DialogoAdicionarCandidato(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(
-                    text = "O horário é calculado automaticamente pelas suas definições.",
+                    text = "O horário já vem calculado pela ordem do dia. " +
+                        "Se precisar de outro, é só trocar aqui.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    SeletorNumero(
+                        valor = estado.hora,
+                        intervalo = (0..23).toList(),
+                        aoAlterar = aoAlterarHora,
+                    )
+                    Text(":", style = MaterialTheme.typography.titleLarge)
+                    SeletorNumero(
+                        valor = estado.minuto,
+                        intervalo = (0..5).map { it * 10 },
+                        aoAlterar = aoAlterarMinuto,
+                    )
+                    if (estado.horarioManual) {
+                        TextButton(onClick = aoVoltarAoHorarioCalculado) {
+                            Text("Usar o calculado")
+                        }
+                    }
+                }
                 CampoTexto(
                     valor = estado.nome,
                     aoAlterar = aoAlterarNome,

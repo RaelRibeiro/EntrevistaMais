@@ -59,6 +59,12 @@ class EntrevistaRepository(
         caminhoCurriculo: String = "",
         nomeArquivoCurriculo: String = "",
         vagaId: Long? = null,
+        /**
+         * Horário escolhido a dedo no diálogo de novo candidato. Nulo mantém o
+         * cálculo automático da agenda; com valor, o candidato já entra com
+         * horário fixo ([Entrevista.inicioManual]).
+         */
+        inicioMinutos: Int? = null,
     ): Resultado {
         if (nome.isBlank()) return Resultado.Erro("Informe o nome do candidato.")
         if (telefone.isNotBlank() && telefone.filter(Char::isDigit).length < 10) {
@@ -79,10 +85,22 @@ class EntrevistaRepository(
             )
         }
 
+        // A duração é sempre a das Definições: o horário muda, o tempo da
+        // entrevista não. Valida aqui para não gravar uma entrevista impossível.
+        if (inicioMinutos != null) {
+            if (inicioMinutos !in 0 until AgendaScheduler.MINUTOS_NO_DIA) {
+                return Resultado.Erro("Horário inválido.")
+            }
+            if (inicioMinutos + definicoes.duracaoMinutos >= AgendaScheduler.MINUTOS_NO_DIA) {
+                return Resultado.Erro("A entrevista não cabe antes da meia-noite com esse horário.")
+            }
+        }
+
         val id = dao.inserir(
             EntrevistaEntity(
                 data = data,
-                inicioMinutos = definicoes.horarioInicioMinutos,
+                inicioMinutos = inicioMinutos ?: definicoes.horarioInicioMinutos,
+                inicioManual = inicioMinutos != null,
                 duracaoMinutos = definicoes.duracaoMinutos,
                 nome = nome.trim(),
                 telefone = telefone.trim(),
@@ -99,6 +117,25 @@ class EntrevistaRepository(
         // no banco a partir de agora.
         persistirOrdem(dao.listarPorData(data), definicoes)
         return Resultado.Sucesso(id)
+    }
+
+    /**
+     * Qual seria o horário do próximo candidato se ele fosse agendado agora.
+     *
+     * O diálogo de novo candidato mostra este valor como padrão no seletor:
+     * assim dá para ajustar a hora sem precisar antes descobrir o número.
+     */
+    suspend fun proximoHorarioMinutos(data: LocalDate): Int {
+        val definicoes = definicoesRepository.obter()
+        val existentes = dao.listarPorData(data)
+        // Um candidato fictício na última posição revela a hora que ele receberia.
+        val proximo = AgendaScheduler.Candidato(id = -1L, nome = "")
+        val calculados = AgendaScheduler.calcularHorarios(
+            definicoes,
+            existentes.map { AgendaScheduler.Candidato(it.id, it.nome) } + proximo,
+        )
+        return calculados.firstOrNull { it.candidato.id == -1L }?.inicioMinutos
+            ?: definicoes.horarioInicioMinutos
     }
 
     /**
@@ -243,7 +280,7 @@ class EntrevistaRepository(
         return Resultado.Ok
     }
 
-    /**
+/**
      * Encerra um candidato: ele some da lista do dia, mas o registro, as
      * respostas e o currículo continuam guardados para consulta.
      */
