@@ -47,7 +47,13 @@ export default function PaginaEntrevista({ params }: Props) {
   useEffect(() => {
     if (!uid) return;
     setCarregando(true);
-    return observarEntrevista(uid, id, setEntrevista);
+    // O observer do Firestore só entrega valor no primeiro snapshot, então é
+    // ele quem desliga o "carregando". Sem isso a tela ficava em
+    // "Carregando entrevista…" para sempre.
+    return observarEntrevista(uid, id, (dados) => {
+      setEntrevista(dados);
+      setCarregando(false);
+    });
   }, [uid, id]);
 
   useEffect(() => {

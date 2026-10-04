@@ -261,18 +261,61 @@ label.campo.arquivo {
   margin-bottom: 18px;
 }
 
-.fieldset span {
+/* `button` entra junto de `span` porque os filtros do formulário de candidato
+   são botões de verdade (trocar de aba), e antes ficavam sem estilo nenhum. */
+.fieldset span,
+.fieldset button {
   padding: 9px 16px;
   border-radius: 999px;
   border: 1px solid var(--borda);
   font-size: 14px;
   cursor: pointer;
+  background: var(--superficie);
+  color: var(--texto);
+  font-family: inherit;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
 }
 
-.fieldset span.selecionado {
+.fieldset span:hover,
+.fieldset button:hover {
+  border-color: var(--primaria);
+}
+
+.fieldset span.selecionado,
+.fieldset button.selecionado {
   background: var(--primaria);
   color: #fff;
   border-color: var(--primaria);
+}
+
+/* Modo de currículo: os dois botões dividem a largura, como abas reais. */
+.abas-curriculo {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  padding: 4px;
+  margin-bottom: 12px;
+  background: var(--fundo);
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+}
+
+.abas-curriculo button {
+  padding: 8px 12px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--texto-suave);
+  font-size: 14px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.abas-curriculo button.selecionado {
+  background: var(--superficie);
+  color: var(--texto);
+  box-shadow: 0 1px 3px rgba(15, 20, 28, 0.12);
 }
 
 .acoes {
@@ -421,6 +464,26 @@ label.campo.arquivo {
   color: var(--texto-suave);
   cursor: default;
   opacity: 0.55;
+}
+
+/* Arquivo já escolhido: nome em destaque com opção de trocar. */
+.anexo-escolhido {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  background: var(--fundo);
+}
+
+.anexo-nome {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ------- Diálogo de confirmação ------- */

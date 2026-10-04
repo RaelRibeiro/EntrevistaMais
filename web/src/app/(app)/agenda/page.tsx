@@ -345,7 +345,7 @@ export default function PaginaAgenda() {
               />
             </label>
 
-            <div className="fieldset" style={{ marginBottom: 10 }}>
+            <div className="abas-curriculo">
               <button
                 type="button"
                 className={modoCurriculo === 'RESUMO' ? 'selecionado' : ''}
@@ -375,10 +375,21 @@ export default function PaginaAgenda() {
                   onChange={(e) => setResumoCurriculo(e.target.value)}
                 />
               </label>
+            ) : arquivo ? (
+              <div className="anexo-escolhido">
+                <span className="anexo-nome">{arquivo.name}</span>
+                <button
+                  type="button"
+                  className="botao botao-texto"
+                  onClick={() => setArquivo(null)}
+                >
+                  Trocar
+                </button>
+              </div>
             ) : (
               <>
                 <label className="botao botao-secundario" style={{ width: '100%' }}>
-                  {arquivo ? 'Trocar arquivo' : 'Escolher PDF ou imagem'}
+                  Escolher PDF ou imagem
                   <input
                     type="file"
                     accept=".pdf,image/*"
@@ -386,10 +397,8 @@ export default function PaginaAgenda() {
                     onChange={(e) => setArquivo(e.target.files?.[0] ?? null)}
                   />
                 </label>
-                <p className="dica" style={{ margin: '4px 0 0' }}>
-                  {arquivo
-                    ? arquivo.name
-                    : 'O arquivo fica guardado no aparelho, então não depende de link.'}
+                <p className="dica" style={{ margin: '6px 0 0' }}>
+                  O arquivo é guardado junto do candidato, então não depende de link.
                 </p>
               </>
             )}
