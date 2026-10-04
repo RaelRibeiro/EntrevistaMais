@@ -954,51 +954,56 @@ function TabelaExperiencias({
         </div>
       )}
 
-      <table className="tabela">
-        <thead>
-          <tr>
-            {colunas.map(([, rotulo]) => (
-              <th key={rotulo}>{rotulo}</th>
-            ))}
-            {linhas.length > 1 && <th />}
-          </tr>
-        </thead>
-        <tbody>
-          {linhas.map((linha) => (
-            <tr key={linha.id}>
-              {colunas.map(([campo, rotulo]) => (
-                <td key={rotulo}>
-                  <input
-                    className="campo"
-                    value={linha[campo]}
-                    readOnly={somenteLeitura}
-                    {...SEM_AUTOFILL}
-                    // `name` único por linha: sem ele o navegador reaproveita o
-                    // mesmo campo em todas as linhas e o popup reaparece.
-                    name={`exp_${linha.id}_${campo}`}
-                    aria-label={rotulo}
-                    onChange={(ev) => alterar(linha, campo, ev.target.value)}
-                  />
-                </td>
+      <div className="tabela-envolve">
+        <table className="tabela">
+          <thead>
+            <tr>
+              {colunas.map(([, rotulo]) => (
+                <th key={rotulo}>{rotulo}</th>
               ))}
-              {linhas.length > 1 && (
-                <td>
-                  {!somenteLeitura && (
-                    <button
-                      className="icone-botao"
-                      title="Remover linha"
-                      aria-label="Remover linha"
-                      onClick={() => void removerExperiencia(uid, entrevistaId, linha.id)}
-                    >
-                      🗑
-                    </button>
-                  )}
-                </td>
-              )}
+              {linhas.length > 1 && <th />}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {linhas.map((linha) => (
+              <tr key={linha.id}>
+                {colunas.map(([campo, rotulo]) => (
+                  <td key={rotulo} data-rotulo={rotulo}>
+                    <input
+                      className="campo"
+                      value={linha[campo]}
+                      readOnly={somenteLeitura}
+                      {...SEM_AUTOFILL}
+                      // `name` único por linha: sem ele o navegador reaproveita o
+                      // mesmo campo em todas as linhas e o popup reaparece.
+                      name={`exp_${linha.id}_${campo}`}
+                      aria-label={rotulo}
+                      // `title` mostra o texto completo ao passar o mouse,
+                      // porque o input corta o que não cabe na coluna.
+                      title={String(linha[campo] ?? '')}
+                      onChange={(ev) => alterar(linha, campo, ev.target.value)}
+                    />
+                  </td>
+                ))}
+                {linhas.length > 1 && (
+                  <td>
+                    {!somenteLeitura && (
+                      <button
+                        className="icone-botao"
+                        title="Remover linha"
+                        aria-label="Remover linha"
+                        onClick={() => void removerExperiencia(uid, entrevistaId, linha.id)}
+                      >
+                        🗑
+                      </button>
+                    )}
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       {!somenteLeitura && (
         <button className="botao botao-secundario" onClick={() => void adicionar()}>
