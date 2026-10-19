@@ -566,10 +566,13 @@ label.campo.arquivo {
   }
 
   .nao-imprimir,
-  .tela,
   .cabecalho,
   .fundo-dialogo,
   .menu-lista {
+    display: none !important;
+  }
+
+  .tela > *:not(.documento-print) {
     display: none !important;
   }
 
