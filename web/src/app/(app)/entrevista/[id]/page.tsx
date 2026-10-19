@@ -22,7 +22,7 @@ import {
   removerExperiencia,
 } from '@/lib/firestore';
 import type { Entrevista, Vaga, Roteiro, Pergunta, LinhaExperiencia } from '@/lib/tipos';
-import { ROTULO_STATUS, ehFinalizado, StatusEntrevista } from '@/lib/tipos';
+import { ROTULO_STATUS, ehFinalizado, StatusEntrevista, horarioDaVaga } from '@/lib/tipos';
 import { minutosParaHora, formatarTelefone } from '@/lib/horario';
 
 type Props = { params: Promise<{ id: string }> };
@@ -43,6 +43,24 @@ export default function PaginaEntrevista({ params }: Props) {
   const [aba, setAba] = useState<AbaEntrevista>('CURRICULO');
   const [mensagem, setMensagem] = useState('');
   const [confirmarFinalizacao, setConfirmarFinalizacao] = useState(false);
+  const [geradoEm, setGeradoEm] = useState('');
+  const [imprimindo, setImprimindo] = useState(false);
+
+  useEffect(() => {
+    if (!imprimindo) return;
+    const id = setTimeout(() => window.print(), 80);
+    const fim = () => setImprimindo(false);
+    window.addEventListener('afterprint', fim);
+    return () => {
+      clearTimeout(id);
+      window.removeEventListener('afterprint', fim);
+    };
+  }, [imprimindo]);
+
+  const exportarPdf = () => {
+    setGeradoEm(new Date().toLocaleString('pt-BR'));
+    setImprimindo(true);
+  };
 
   useEffect(() => {
     if (!uid) return;
@@ -148,7 +166,7 @@ export default function PaginaEntrevista({ params }: Props) {
   const podeIniciar = !emAndamento && !finalizada;
 
   return (
-    <div>
+    <div className="tela">
       <div className="cartao">
         <div className="secao-titulo">Candidato</div>
         <div
@@ -166,7 +184,15 @@ export default function PaginaEntrevista({ params }: Props) {
           <span className={`status ${entrevista.status.toLowerCase()}`}>
             {ROTULO_STATUS[entrevista.status]}
           </span>
+          <button className="botao botao-secundario" onClick={exportarPdf}>
+            Exportar PDF
+          </button>
         </div>
+        {entrevista.categoria && (
+          <p className="dica" style={{ margin: 0 }}>
+            Categoria: {entrevista.categoria}
+          </p>
+        )}
         <p className="dica" style={{ margin: 0 }}>
           {formatarTelefone(entrevista.telefone)}
         </p>
@@ -267,6 +293,141 @@ export default function PaginaEntrevista({ params }: Props) {
           </p>
         </div>
       )}
+
+      <DocumentoImpressao
+        uid={uid}
+        entrevista={entrevista}
+        vaga={vaga}
+        roteiro={roteiro}
+        perguntas={perguntas}
+        respostas={respostas}
+        geradoEm={geradoEm}
+      />
+    </div>
+  );
+}
+
+function DocumentoImpressao({
+  uid,
+  entrevista,
+  vaga,
+  roteiro,
+  perguntas,
+  respostas,
+  geradoEm,
+}: {
+  uid: string;
+  entrevista: Entrevista;
+  vaga?: Vaga | null;
+  roteiro: Roteiro | null;
+  perguntas: Pergunta[];
+  respostas: Record<string, string>;
+  geradoEm: string;
+}) {
+  const [experiencias, setExperiencias] = useState<LinhaExperiencia[]>([]);
+
+  useEffect(() => {
+    if (!uid) return;
+    return observarExperiencias(uid, entrevista.id, setExperiencias);
+  }, [uid, entrevista.id]);
+
+  const respondidas = perguntas.filter(
+    (p) =>
+      p.tipo !== 'SECAO' &&
+      p.tipo !== 'TABELA_EXPERIENCIAS' &&
+      (respostas[String(p.id)] ?? '').trim() !== '',
+  );
+
+  return (
+    <div className="documento-print">
+      <div className="doc-cabecalho">
+        <h1>{entrevista.nome}</h1>
+        {entrevista.categoria && (
+          <p className="doc-linha-info">Categoria: {entrevista.categoria}</p>
+        )}
+        <p className="doc-linha-info">Telefone: {formatarTelefone(entrevista.telefone)}</p>
+        <p className="doc-linha-info">
+          Entrevista: {dataParaTexto(entrevista.data)} ·{' '}
+          {minutosParaHora(entrevista.inicioMinutos)} às{' '}
+          {minutosParaHora(entrevista.inicioMinutos + entrevista.duracaoMinutos)}
+        </p>
+        <p className="doc-linha-info">Situação: {ROTULO_STATUS[entrevista.status]}</p>
+      </div>
+
+      {vaga && (
+        <>
+          <h2>Vaga</h2>
+          <p className="doc-par">
+            {vaga.titulo}
+            {vaga.empresa ? ` — ${vaga.empresa}` : ''}
+          </p>
+          <p className="doc-resposta">
+            {[
+              vaga.tipoContrato && `Contrato: ${vaga.tipoContrato}`,
+              horarioDaVaga(vaga) && `Jornada: ${horarioDaVaga(vaga)}`,
+              vaga.salarioBeneficios && `Salário e benefícios: ${vaga.salarioBeneficios}`,
+              vaga.tempoExperiencia && `Experiência: ${vaga.tempoExperiencia}`,
+              vaga.escolaridade && `Escolaridade: ${vaga.escolaridade}`,
+              vaga.exigeHabilitacao && `Habilitação: ${vaga.exigeHabilitacao}`,
+              vaga.resumoAtividades && `Atividades: ${vaga.resumoAtividades}`,
+            ]
+              .filter(Boolean)
+              .join('\n')}
+          </p>
+        </>
+      )}
+
+      <h2>Currículo</h2>
+      {entrevista.curriculo.trim() ? (
+        <p className="doc-resposta">{entrevista.curriculo}</p>
+      ) : (
+        <p className="doc-par">Sem resumo do currículo escrito.</p>
+      )}
+      {entrevista.nomeArquivoCurriculo && (
+        <p className="doc-par">Arquivo anexado: {entrevista.nomeArquivoCurriculo}</p>
+      )}
+
+      {experiencias.length > 0 && (
+        <>
+          <h2>Experiência profissional</h2>
+          <table className="doc-tabela">
+            <thead>
+              <tr>
+                <th>Local</th>
+                <th>Ano</th>
+                <th>Duração</th>
+                <th>Cargo</th>
+                <th>Motivo da saída</th>
+              </tr>
+            </thead>
+            <tbody>
+              {experiencias.map((linha) => (
+                <tr key={linha.id}>
+                  <td>{linha.local || '—'}</td>
+                  <td>{linha.ano || '—'}</td>
+                  <td>{linha.duracao || '—'}</td>
+                  <td>{linha.cargo || '—'}</td>
+                  <td>{linha.motivoSaida || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+
+      <h2>{roteiro?.titulo ?? 'Roteiro'}</h2>
+      {respondidas.length === 0 ? (
+        <p className="doc-par">Nenhuma resposta registrada neste roteiro.</p>
+      ) : (
+        respondidas.map((p) => (
+          <div key={p.id}>
+            <p className="doc-par">{p.titulo}</p>
+            <p className="doc-resposta">{respostas[String(p.id)]}</p>
+          </div>
+        ))
+      )}
+
+      <p className="doc-rodape">EntrevistaMais — gerado em {geradoEm}</p>
     </div>
   );
 }

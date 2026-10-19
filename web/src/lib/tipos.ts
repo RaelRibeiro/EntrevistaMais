@@ -126,6 +126,7 @@ export interface Entrevista {
   id: string;
   nome: string;
   telefone: string;
+  categoria: string;
   data: string;
   inicioMinutos: number;
   duracaoMinutos: number;

@@ -367,6 +367,7 @@ function entrevistaDoDocumento(snap: DocumentSnapshot): Entrevista {
     id: '',
     nome: '',
     telefone: '',
+    categoria: '',
     data: '',
     inicioMinutos: 0,
     duracaoMinutos: 45,
@@ -398,6 +399,7 @@ export function observarEntrevistas(
 export async function adicionarEntrevista(
   uid: string,
   dados: Pick<Entrevista, 'nome' | 'telefone' | 'data' | 'vagaId'> & {
+    categoria?: string;
     curriculo?: string;
     tipoCurriculo?: TipoCurriculo;
     caminhoCurriculo?: string;
@@ -461,6 +463,7 @@ export async function adicionarEntrevista(
     id,
     nome,
     telefone,
+    categoria: dados.categoria?.trim() ?? '',
     data: dados.data,
     vagaId: dados.vagaId ?? null,
     duracaoMinutos: definicoes.duracaoMinutos,

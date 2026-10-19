@@ -54,6 +54,9 @@ export default function PaginaAgenda() {
   const [confirmarRemocao, setConfirmarRemocao] = useState<Entrevista | null>(null);
   const [nome, setNome] = useState('');
   const [telefone, setTelefone] = useState('');
+  const [categoria, setCategoria] = useState('');
+  const [busca, setBusca] = useState('');
+  const [filtroCategoria, setFiltroCategoria] = useState('');
   const [vagaId, setVagaId] = useState('');
   const [modoCurriculo, setModoCurriculo] = useState<'RESUMO' | 'ANEXO'>('RESUMO');
   const [resumoCurriculo, setResumoCurriculo] = useState('');
@@ -62,6 +65,27 @@ export default function PaginaAgenda() {
   const [horarioCalculado, setHorarioCalculado] = useState<number | null>(null);
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);
+  const [geradoEm, setGeradoEm] = useState('');
+  const [imprimindo, setImprimindo] = useState(false);
+
+  useEffect(() => {
+    if (!imprimindo) return;
+    const id = setTimeout(() => window.print(), 80);
+    const fim = () => setImprimindo(false);
+    window.addEventListener('afterprint', fim);
+    return () => {
+      clearTimeout(id);
+      window.removeEventListener('afterprint', fim);
+    };
+  }, [imprimindo]);
+
+  const exportarPdf = () => {
+    setGeradoEm(new Date().toLocaleString('pt-BR'));
+    setImprimindo(true);
+  };
+
+  const tituloDaVaga = (vagaId: number | null) =>
+    vagas.find((v) => String(v.id) === String(vagaId))?.titulo ?? '—';
 
   useEffect(() => {
     if (!uid) return;
@@ -73,11 +97,23 @@ export default function PaginaAgenda() {
     return observarVagas(uid, setVagas);
   }, [uid]);
 
-  const visiveis = mostrarEncerradas
+  const semEncerradas = mostrarEncerradas
     ? entrevistas
     : entrevistas.filter((e) => e.status !== 'ENCERRADA');
   const encerradas = entrevistas.filter((e) => e.status === 'ENCERRADA').length;
   const encerraveis = entrevistas.filter((e) => ehEncerravel(e.status)).length;
+
+  const categorias = Array.from(
+    new Set(entrevistas.map((e) => e.categoria).filter(Boolean)),
+  ).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+
+  const termo = busca.trim().toLowerCase();
+  const visiveis = semEncerradas.filter((e) => {
+    if (filtroCategoria && e.categoria !== filtroCategoria) return false;
+    if (termo && !e.nome.toLowerCase().includes(termo)) return false;
+    return true;
+  });
+  const filtrando = Boolean(termo || filtroCategoria);
 
   const abrirFormulario = async () => {
     if (!uid) return;
@@ -106,6 +142,7 @@ export default function PaginaAgenda() {
       await adicionarEntrevista(uid, {
         nome,
         telefone,
+        categoria,
         data,
         vagaId: vagaId ? Number(vagaId) : null,
         curriculo: modoCurriculo === 'RESUMO' ? resumoCurriculo : undefined,
@@ -116,6 +153,7 @@ export default function PaginaAgenda() {
       });
       setNome('');
       setTelefone('');
+      setCategoria('');
       setVagaId('');
       setModoCurriculo('RESUMO');
       setResumoCurriculo('');
@@ -131,7 +169,7 @@ export default function PaginaAgenda() {
   };
 
   return (
-    <div>
+    <div className="tela">
       <div className="cabecalho-agenda">
         <button
           className="icone-botao"
@@ -179,6 +217,11 @@ export default function PaginaAgenda() {
         <button className="botao botao-texto" onClick={() => setData(hojeIso())}>
           Hoje
         </button>
+        {entrevistas.length > 0 && (
+          <button className="botao botao-texto" onClick={exportarPdf}>
+            Exportar PDF
+          </button>
+        )}
       </div>
 
       {(encerraveis > 0 || encerradas > 0) && (
@@ -206,10 +249,43 @@ export default function PaginaAgenda() {
         </div>
       )}
 
+      {entrevistas.length > 0 && (
+        <div className="filtros">
+          <input
+            className="campo filtro-busca"
+            type="search"
+            placeholder="Buscar por nome"
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+          />
+          {categorias.length > 0 && (
+            <div className="chips">
+              <button
+                type="button"
+                className={`chip ${filtroCategoria === '' ? 'selecionado' : ''}`}
+                onClick={() => setFiltroCategoria('')}
+              >
+                Todas
+              </button>
+              {categorias.map((c) => (
+                <button
+                  type="button"
+                  key={c}
+                  className={`chip ${filtroCategoria === c ? 'selecionado' : ''}`}
+                  onClick={() => setFiltroCategoria(c)}
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {visiveis.length === 0 && (
         <p className="dica" style={{ marginTop: 18 }}>
-          {entrevistas.length > 0
-            ? 'Nenhuma entrevista neste dia'
+          {filtrando
+            ? 'Nenhum candidato com esse filtro neste dia'
             : 'Nenhuma entrevista neste dia'}
         </p>
       )}
@@ -352,6 +428,26 @@ export default function PaginaAgenda() {
               </button>
             </div>
 
+            <label className="rotulo">
+              Categoria
+              <input
+                className="campo"
+                name="candidato_categoria"
+                list="categorias-existentes"
+                placeholder="Opcional — ex.: Comercial, Estágio"
+                {...SEM_AUTOFILL}
+                value={categoria}
+                onChange={(e) => setCategoria(e.target.value)}
+              />
+            </label>
+            {categorias.length > 0 && (
+              <datalist id="categorias-existentes">
+                {categorias.map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
+            )}
+
             {modoCurriculo === 'RESUMO' ? (
               <label className="rotulo">
                 Resumo do currículo
@@ -486,6 +582,48 @@ export default function PaginaAgenda() {
           </div>
         </div>
       )}
+
+      <div className="documento-print">
+        <div className="doc-cabecalho">
+          <h1>Agenda de entrevistas</h1>
+          <p className="doc-linha-info">{paraTituloAgenda(data)}</p>
+          <p className="doc-linha-info">
+            {entrevistas.length} de {vagas.length} vagas usadas
+          </p>
+        </div>
+
+        {visiveis.length === 0 ? (
+          <p className="doc-par">Nenhuma entrevista neste dia.</p>
+        ) : (
+          <table className="doc-tabela">
+            <thead>
+              <tr>
+                <th>Hora</th>
+                <th>Candidato</th>
+                <th>Categoria</th>
+                <th>Vaga</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visiveis.map((e) => (
+                <tr key={e.id}>
+                  <td>{minutosParaHora(e.inicioMinutos)}</td>
+                  <td>
+                    {e.nome}
+                    {e.telefone ? ` — ${e.telefone}` : ''}
+                  </td>
+                  <td>{e.categoria || '—'}</td>
+                  <td>{tituloDaVaga(e.vagaId)}</td>
+                  <td>{ROTULO_STATUS[e.status]}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+
+        <p className="doc-rodape">EntrevistaMais — gerado em {geradoEm}</p>
+      </div>
     </div>
   );
 }
@@ -649,6 +787,7 @@ function CartaoCandidato({
       <div className="candidato-nome" onClick={aoAbrir} style={{ cursor: 'pointer' }}>
         {e.nome}
         {e.inicioManual && <div className="dica hora-alterada">Horário alterado</div>}
+        {e.categoria && <span className="tag-categoria">{e.categoria}</span>}
         <span className={`status ${e.status.toLowerCase()}`}>
           {ROTULO_STATUS[e.status]}
         </span>

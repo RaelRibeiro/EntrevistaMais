@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
@@ -19,6 +19,18 @@ export default function LayoutApp({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const caminho = usePathname();
   const mobile = useMobile();
+  const [online, setOnline] = useState(true);
+
+  useEffect(() => {
+    const atualizar = () => setOnline(navigator.onLine);
+    atualizar();
+    window.addEventListener('online', atualizar);
+    window.addEventListener('offline', atualizar);
+    return () => {
+      window.removeEventListener('online', atualizar);
+      window.removeEventListener('offline', atualizar);
+    };
+  }, []);
 
   useEffect(() => {
     if (!carregando && !usuario) router.replace('/');
@@ -34,7 +46,7 @@ export default function LayoutApp({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      <header className="cabecalho">
+      <header className="cabecalho nao-imprimir">
         <nav className="nav">
           <Link href="/agenda" className="marca">
             EntrevistaMais
@@ -63,6 +75,12 @@ export default function LayoutApp({ children }: { children: React.ReactNode }) {
           </button>
         </nav>
       </header>
+      {!online && (
+        <div className="aviso-offline nao-imprimir">
+          Você está sem internet. O que já foi carregado continua disponível e as
+          alterações são enviadas quando a conexão voltar.
+        </div>
+      )}
       <main className="pagina">{children}</main>
     </>
   );
