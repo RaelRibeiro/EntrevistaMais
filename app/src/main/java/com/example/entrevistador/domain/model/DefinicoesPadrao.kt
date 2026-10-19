@@ -2,14 +2,6 @@ package com.example.entrevistador.domain.model
 
 import java.time.LocalTime
 
-/**
- * Valores padrão definidos pelo recrutador. Toda vez que um candidato é
- * adicionado, removido ou reordenado, a agenda do dia é recalculada a partir
- * daqui — por isso os horários ficam sempre organizados sozinhos.
- *
- * Os horários são guardados em minutos desde a meia-noite para facilitar a
- * persistência e os cálculos.
- */
 data class DefinicoesPadrao(
     val horarioInicioMinutos: Int = 9 * 60,
     val almocoInicioMinutos: Int = 12 * 60,
@@ -35,7 +27,6 @@ data class DefinicoesPadrao(
     }
 }
 
-/** Resultado da validação de um formulário de definições, campo a campo. */
 data class ErrosDefinicoes(
     val horarioInicio: String? = null,
     val almocoInicio: String? = null,

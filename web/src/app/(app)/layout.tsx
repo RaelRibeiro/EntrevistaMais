@@ -14,10 +14,6 @@ const ITENS = [
   { rota: '/roteiro', rotulo: 'Roteiro' },
 ];
 
-/**
- * Estrutura comum das telas que precisam de conta. Sem login, manda para a
- * página inicial (o guarda-redes de login vive aqui, e não em cada tela).
- */
 export default function LayoutApp({ children }: { children: React.ReactNode }) {
   const { usuario, carregando, sair } = useAuth();
   const router = useRouter();
@@ -28,7 +24,6 @@ export default function LayoutApp({ children }: { children: React.ReactNode }) {
     if (!carregando && !usuario) router.replace('/');
   }, [carregando, usuario, router]);
 
-  // Igual ao app: garante o roteiro padrão de 29 perguntas no primeiro login.
   useEffect(() => {
     if (usuario?.uid) void garantirRoteiroPadrao(usuario.uid);
   }, [usuario?.uid]);

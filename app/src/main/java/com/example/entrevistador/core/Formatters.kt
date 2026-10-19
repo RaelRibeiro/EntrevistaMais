@@ -16,7 +16,6 @@ private val FORMATO_DIA_SEMANA: DateTimeFormatter = DateTimeFormatter.ofPattern(
 private val FORMATO_MES: DateTimeFormatter = DateTimeFormatter.ofPattern("MMMM", PT_BR)
 private val FORMATO_CRONOMETRO: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss", PT_BR)
 
-/** "540" -> "09:00". */
 fun Int.minutosParaHora(): String =
     FORMATO_HORA.format(LocalTime.ofSecondOfDay(coerceIn(0, 24 * 60) * 60L))
 
@@ -43,7 +42,6 @@ fun LocalDate.paraDiaDaSemana(): String =
 fun LocalDate.paraMes(): String =
     FORMATO_MES.format(this).replaceFirstChar { it.uppercase() }
 
-/** "Hoje", "Amanhã" ou "12/03/2026 - quinta-feira". */
 fun LocalDate.paraTituloAgenda(): String = when (this) {
     LocalDate.now() -> "Hoje - ${paraDiaDaSemana()}"
     LocalDate.now().plusDays(1) -> "Amanhã - ${paraDiaDaSemana()}"

@@ -110,7 +110,6 @@ interface VagaDao {
 @Dao
 interface RoteiroDao {
 
-    /** Só os roteiros do processo; os de cada vaga têm busca própria. */
     @Query("SELECT * FROM roteiros WHERE vagaId IS NULL ORDER BY ordem ASC, id ASC")
     fun observarTodos(): Flow<List<RoteiroEntity>>
 
@@ -120,7 +119,6 @@ interface RoteiroDao {
     @Query("SELECT * FROM roteiros WHERE padrao = 1 ORDER BY ordem ASC, id ASC LIMIT 1")
     suspend fun buscarPadrao(): RoteiroEntity?
 
-    /** Roteiro próprio da vaga, se existir. Nulo = ela ainda usa o padrão. */
     @Query("SELECT * FROM roteiros WHERE vagaId = :vagaId ORDER BY id ASC LIMIT 1")
     fun observarDaVaga(vagaId: Long): Flow<RoteiroEntity?>
 

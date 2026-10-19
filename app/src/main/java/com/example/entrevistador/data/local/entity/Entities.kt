@@ -34,22 +34,15 @@ data class EntrevistaEntity(
     val fimReal: Instant? = null,
     @ColumnInfo(defaultValue = "") val respostasRoteiro: String = "",
     @ColumnInfo(defaultValue = "") val notas: String = "",
-    // --- currículo ---
+
     @ColumnInfo(defaultValue = "RESUMO") val tipoCurriculo: TipoCurriculo = TipoCurriculo.RESUMO,
-    /** Caminho do arquivo copiado para o armazenamento interno do app. */
+
     @ColumnInfo(defaultValue = "") val caminhoCurriculo: String = "",
-    /** Nome original do arquivo, para exibir. */
+
     @ColumnInfo(defaultValue = "") val nomeArquivoCurriculo: String = "",
-    /** Vaga oferecida nesta entrevista (opcional). */
+
     @ColumnInfo(defaultValue = "") val vagaId: Long? = null,
-    /**
-     * O recrutador moveu este horário na mão.
-     *
-     * As Definições são o padrão, mas a Reality é que às vezes o candidato
-     * chega adiantado ou atrasado. Com esta marca, o recálculo automático
-     * (quando uma definição muda, alguém entra ou sai do dia) respeita o
-     * horário escolhido em vez de sobrescrever ele.
-     */
+
     @ColumnInfo(defaultValue = "0") val inicioManual: Boolean = false,
 )
 
@@ -182,10 +175,9 @@ fun Experiencia.paraEntidade(): ExperienciaEntity = ExperienciaEntity(
 data class VagaEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0L,
     val titulo: String,
-    // Os defaultValue são obrigatórios: a migração adiciona as colunas com
-    // DEFAULT, e o Room compara esse default com o declarado aqui.
+
     @ColumnInfo(defaultValue = "") val empresa: String = "",
-    /** Entrada e saída em minutos desde a meia-noite. */
+
     @ColumnInfo(defaultValue = "-1") val entradaMinutos: Int = Vaga.SEM_HORARIO,
     @ColumnInfo(defaultValue = "-1") val saidaMinutos: Int = Vaga.SEM_HORARIO,
     @ColumnInfo(defaultValue = "") val tipoContrato: String = "",
@@ -240,12 +232,7 @@ data class RoteiroEntity(
     val conteudo: String,
     val ordem: Int = 0,
     val padrao: Boolean = true,
-    /**
-     * Roteiro próprio de uma vaga.
-     *
-     * Nulo é o roteiro padrão do processo, que serve de base para todos. Com o
-     * id preenchido, o roteiro vale só para aquela vaga e não afeta as demais.
-     */
+
     val vagaId: Long? = null,
 )
 

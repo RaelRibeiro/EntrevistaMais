@@ -13,13 +13,6 @@ import kotlinx.coroutines.flow.map
 import java.time.Instant
 import java.time.LocalDate
 
-/**
- * Guarda as entrevistas e mantém os horários sempre organizados.
- *
- * Regra central: qualquer mudança na lista de candidatos de um dia dispara um
- * recálculo usando as [DefinicoesPadrao] vigentes. É isso que faz o recrutador
- * "jogar" candidatos na agenda e os horários se ajeitarem sozinhos.
- */
 class EntrevistaRepository(
     private val dao: EntrevistaDao,
     private val definicoesRepository: ProvedorDefinicoes,
@@ -34,22 +27,11 @@ class EntrevistaRepository(
 
     suspend fun buscarPorId(id: Long): Entrevista? = dao.buscarPorId(id)?.paraDominio()
 
-    /** Quantos candidatos já estão na vaga, para avisar quando o limite passar. */
     suspend fun contarCandidatosDaVaga(vagaId: Long): Int = dao.contarPorVaga(vagaId)
 
-    /**
-     * Contagem por vaga que se atualiza sozinha quando um candidato entra ou sai.
-     * Vagas sem nenhum candidato não aparecem no mapa, e a interface trata a
-     * ausência como zero.
-     */
     fun observarContagemPorVaga(): Flow<Map<Long, Int>> =
         dao.observarContagemPorVaga().map { lista -> lista.associate { it.vagaId to it.quantidade } }
 
-    /**
-     * Currículo do candidato: um resumo escrito, um PDF ou uma imagem.
-     * Links não são aceitos de propósito — link de currículo expira e some,
-     * e o recrutador precisa do documento na hora da entrevista.
-     */
     suspend fun adicionarCandidato(
         data: LocalDate,
         nome: String,
@@ -59,11 +41,7 @@ class EntrevistaRepository(
         caminhoCurriculo: String = "",
         nomeArquivoCurriculo: String = "",
         vagaId: Long? = null,
-        /**
-         * Horário escolhido a dedo no diálogo de novo candidato. Nulo mantém o
-         * cálculo automático da agenda; com valor, o candidato já entra com
-         * horário fixo ([Entrevista.inicioManual]).
-         */
+
         inicioMinutos: Int? = null,
     ): Resultado {
         if (nome.isBlank()) return Resultado.Erro("Informe o nome do candidato.")
@@ -85,8 +63,6 @@ class EntrevistaRepository(
             )
         }
 
-        // A duração é sempre a das Definições: o horário muda, o tempo da
-        // entrevista não. Valida aqui para não gravar uma entrevista impossível.
         if (inicioMinutos != null) {
             if (inicioMinutos !in 0 until AgendaScheduler.MINUTOS_NO_DIA) {
                 return Resultado.Erro("Horário inválido.")
@@ -113,22 +89,15 @@ class EntrevistaRepository(
                 vagaId = vagaId,
             )
         )
-        // A lista precisa ser relida depois do insert: o candidato novo só existe
-        // no banco a partir de agora.
+
         persistirOrdem(dao.listarPorData(data), definicoes)
         return Resultado.Sucesso(id)
     }
 
-    /**
-     * Qual seria o horário do próximo candidato se ele fosse agendado agora.
-     *
-     * O diálogo de novo candidato mostra este valor como padrão no seletor:
-     * assim dá para ajustar a hora sem precisar antes descobrir o número.
-     */
     suspend fun proximoHorarioMinutos(data: LocalDate): Int {
         val definicoes = definicoesRepository.obter()
         val existentes = dao.listarPorData(data)
-        // Um candidato fictício na última posição revela a hora que ele receberia.
+
         val proximo = AgendaScheduler.Candidato(id = -1L, nome = "")
         val calculados = AgendaScheduler.calcularHorarios(
             definicoes,
@@ -138,14 +107,6 @@ class EntrevistaRepository(
             ?: definicoes.horarioInicioMinutos
     }
 
-    /**
-     * Remove o candidato e tudo que pertencia a ele.
-     *
-     * As respostas do roteiro e a tabela de locais são apagadas antes da
-     * entrevista: elas não têm cascade no banco, e ficavam órfãs apontando
-     * para um candidato que não existe mais. Devolve o caminho do currículo
-     * anexado para o app apagar também o arquivo.
-     */
     suspend fun remover(id: Long): Resultado {
         val entrevista = dao.buscarPorId(id) ?: return Resultado.Erro("Entrevista não encontrada.")
         if (entrevista.status == StatusEntrevista.EM_ANDAMENTO) {
@@ -161,18 +122,6 @@ class EntrevistaRepository(
 
     suspend fun moverParaBaixo(id: Long): Resultado = mover(id, delta = 1)
 
-    /**
-     * Muda só o horário de início deste candidato.
-     *
-     * As Definições dão o padrão da agenda, mas o dia real não segue o papel:
-     * o candidato chega mais cedo, o anterior atrasou, e aí é preciso encurtar
-     * ou adiar a chamada. O horário passa a ser manual ([inicioManual]) e passa
-     * a resistir ao recálculo automático.
-     *
-     * A duração não muda: quem define o tempo é a definição, não este ajuste.
-     * Se o novo horário chocar com outro candidato, a alteração é feita mesmo
-     * assim e o app avisa — quem decide de encurtar a conversa é o recrutador.
-     */
     suspend fun alterarHorario(id: Long, novoInicioMinutos: Int): Resultado {
         val entrevista = dao.buscarPorId(id) ?: return Resultado.Erro("Entrevista não encontrada.")
         if (entrevista.status == StatusEntrevista.EM_ANDAMENTO) {
@@ -202,7 +151,6 @@ class EntrevistaRepository(
         }
     }
 
-    /** Devolve o candidato para o horário calculado pelas Definições. */
     suspend fun voltarAoHorarioPadrao(id: Long): Resultado {
         val entrevista = dao.buscarPorId(id) ?: return Resultado.Erro("Entrevista não encontrada.")
         if (!entrevista.inicioManual) return Resultado.Ok
@@ -216,9 +164,7 @@ class EntrevistaRepository(
         if (entrevista.status == StatusEntrevista.CONCLUIDA) {
             return Resultado.Erro("Esta entrevista já foi concluída.")
         }
-        // Cancelada, "não compareceu", decidida e encerrada não começam a contar
-        // tempo: se a pessoa voltou, o recrutador reabre a entrevista e só então
-        // inicia.
+
         if (entrevista.status == StatusEntrevista.CANCELADA ||
             entrevista.status == StatusEntrevista.NAO_COMPARECEU ||
             entrevista.status.decidido ||
@@ -237,8 +183,7 @@ class EntrevistaRepository(
         if (entrevista.status == StatusEntrevista.ENCERRADA) {
             return Resultado.Erro("Reabra a entrevista encerrada para finalizá-la de novo.")
         }
-        // Reaprovar ou reprovar significa voltar à conclusão: a entrevista já
-        // aconteceu, só a decisão é que mudou.
+
         dao.atualizar(
             entrevista.copy(
                 status = StatusEntrevista.CONCLUIDA,
@@ -254,15 +199,8 @@ class EntrevistaRepository(
     suspend fun marcarNaoCompareceu(id: Long): Resultado =
         alterarStatusSimples(id, StatusEntrevista.NAO_COMPARECEU)
 
-    /**
-     * Aprova o candidato para a próxima fase.
-     *
-     * Só faz sentido depois da entrevista concluída: decidir antes de entrevistar
-     * não tem o que avaliar, então devolvemos um erro em vez de gravar.
-     */
     suspend fun aprovar(id: Long): Resultado = decidir(id, StatusEntrevista.APROVADO)
 
-    /** Reprova o candidato na fase atual. Mesmas regras de [aprovar]. */
     suspend fun reprovar(id: Long): Resultado = decidir(id, StatusEntrevista.REPROVADO)
 
     private suspend fun decidir(id: Long, status: StatusEntrevista): Resultado {
@@ -280,10 +218,6 @@ class EntrevistaRepository(
         return Resultado.Ok
     }
 
-/**
-     * Encerra um candidato: ele some da lista do dia, mas o registro, as
-     * respostas e o currículo continuam guardados para consulta.
-     */
     suspend fun encerrar(id: Long): Resultado {
         val entrevista = dao.buscarPorId(id) ?: return Resultado.Erro("Entrevista não encontrada.")
         if (entrevista.status == StatusEntrevista.EM_ANDAMENTO) {
@@ -296,13 +230,6 @@ class EntrevistaRepository(
         return Resultado.Ok
     }
 
-    /**
-     * Encerra de uma vez todos os candidatos do dia que já foram avaliados.
-     *
-     * É o atalho para o caso comum: o recrutador selecionou e entrevistou o
-     * dia inteiro e quer só limpar a lista. Devolve quantos foram encerrados
-     * para a interface avisar.
-     */
     suspend fun encerrarAvaliadosDoDia(data: LocalDate): Int {
         val candidatos = dao.listarPorData(data).filter { it.status.encerravel }
         if (candidatos.isEmpty()) return 0
@@ -312,15 +239,12 @@ class EntrevistaRepository(
         return candidatos.size
     }
 
-    /** Devolve a entrevista para AGENDADA, para o recrutador corrigir algo errado. */
     suspend fun reabrir(id: Long): Resultado {
         val entrevista = dao.buscarPorId(id) ?: return Resultado.Erro("Entrevista não encontrada.")
         if (entrevista.status == StatusEntrevista.EM_ANDAMENTO) {
             return Resultado.Erro("Finalize a entrevista antes de reabrí-la.")
         }
-        // Reabrir é sempre um recuo: volta para AGENDADA e zera a decisão e o
-        // encerramento, senão o candidato reapareceria com um status que não
-        // corresponde a nada.
+
         dao.atualizar(
             entrevista.copy(
                 status = StatusEntrevista.AGENDADA,
@@ -331,7 +255,6 @@ class EntrevistaRepository(
         return Resultado.Ok
     }
 
-    /** Traz de volta só a decisão, mantendo a entrevista concluída. */
     suspend fun voltarParaConcluida(id: Long): Resultado {
         val entrevista = dao.buscarPorId(id) ?: return Resultado.Erro("Entrevista não encontrada.")
         if (entrevista.status == StatusEntrevista.EM_ANDAMENTO) {
@@ -352,8 +275,7 @@ class EntrevistaRepository(
         if (entrevista.status == StatusEntrevista.EM_ANDAMENTO) {
             return Resultado.Erro("Finalize a entrevista antes de alterar o status.")
         }
-        // Cancelar ou marcar falta depois de decidir inverteria o sentido do
-        // que o recrutador já avaliou, então exigimos voltar antes.
+
         if (entrevista.status.encerravel && status != StatusEntrevista.ENCERRADA) {
             return Resultado.Erro("Reabra a entrevista antes de alterar o status.")
         }
@@ -373,7 +295,6 @@ class EntrevistaRepository(
         return Resultado.Ok
     }
 
-    /** Troca o currículo do candidato por um arquivo anexado. */
     suspend fun salvarCurriculoAnexado(
         id: Long,
         tipoCurriculo: TipoCurriculo,
@@ -397,10 +318,6 @@ class EntrevistaRepository(
         return Resultado.Ok
     }
 
-    /**
-     * Reaplica as definições a um dia inteiro. Usado quando o recrutador muda
-     * as configurações padrão: os horários do dia são rearranjados.
-     */
     suspend fun reaplicarDefinicoes(data: LocalDate) {
         recalcular(data)
     }
@@ -421,21 +338,12 @@ class EntrevistaRepository(
         return Resultado.Ok
     }
 
-    /** Recalcula e persiste os horários de [data] com as definições vigentes. */
     private suspend fun recalcular(data: LocalDate) {
         val doDia = dao.listarPorData(data).sortedBy { it.ordem }
         if (doDia.isEmpty()) return
         persistirOrdem(doDia, definicoesRepository.obter())
     }
 
-    /**
-     * Calcula os horários de [naNovaOrdem] e grava de volta.
-     * [naNovaOrdem] é a lista completa do dia, já na ordem desejada.
-     *
-     * Quem tem [EntrevistaEntity.inicioManual] guarda o horário escolhido pelo
-     * recrutador: as Definições continuam valendo para a duração e para todo o
-     * resto, mas não sobrescrevem uma decisão manual.
-     */
     private suspend fun persistirOrdem(
         naNovaOrdem: List<EntrevistaEntity>,
         definicoes: DefinicoesPadrao,
@@ -466,16 +374,10 @@ class EntrevistaRepository(
     sealed interface Resultado {
         data class Sucesso(val id: Long = 0L) : Resultado
 
-        /** Atalho para quando a ação não devolve nada (ex.: mover). */
         data object Ok : Resultado
 
-        /**
-         * A ação foi feita, mas o recrutador precisa ficar sabendo de um
-         * detalhe — por exemplo, que o novo horário choca com outra entrevista.
-         */
         data class Aviso(val mensagem: String) : Resultado
 
-        /** Candidato removido; [caminhoCurriculo] é o arquivo a apagar, se houver. */
         data class Removido(val caminhoCurriculo: String = "") : Resultado
 
         data class Erro(val mensagem: String) : Resultado

@@ -76,7 +76,6 @@ export function useAuth(): AuthDados {
   return contexto;
 }
 
-/** Grava o perfil do usuário no Firestore quando ele entra/cria a conta. */
 export function guardarPerfil(uid: string, nome: string, email: string): Promise<void> {
   return setDoc(doc(obterDb(), 'usuarios', uid), { nome, email, criadoEm: Timestamp.now() });
 }

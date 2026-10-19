@@ -4,26 +4,16 @@ import com.example.entrevistador.domain.model.Usuario
 import com.google.firebase.auth.FirebaseAuthException
 import kotlinx.coroutines.flow.Flow
 
-/**
- * Login do usuário.
- *
- * Hoje é sempre o Firebase (mesma conta do site Entrevista+): a [FirebaseAuthRepository]
- * autentica, mantém a sessão e grava a raiz `usuarios/{uid}` dos dados.
- */
 interface AuthRepository {
 
-    /** Usuário logado, ou null se não houver sessão. */
     val usuarioAtual: Flow<Usuario?>
 
-    /** Cria a conta. Em caso de falha, devolve [ErroAuth] com a causa. */
     suspend fun criarConta(nome: String, email: String, senha: String): ResultadoAuth
 
     suspend fun entrar(email: String, senha: String): ResultadoAuth
 
-    /** Entra com o idToken do Google (vindo da tela via GoogleSignIn). */
     suspend fun entrarComGoogle(idToken: String): ResultadoAuth
 
-    /** Atualiza o nome de exibição do usuário logado. */
     suspend fun atualizarNome(nome: String): ResultadoAuth
 
     suspend fun sair()
@@ -36,15 +26,6 @@ sealed interface ResultadoAuth {
     data class Erro(val mensagem: String) : ResultadoAuth
 }
 
-/**
- * Traduz o erro do Firebase para uma mensagem que faça sentido na tela.
- *
- * Sem isto o app mostra o texto cru do Firebase, em inglês e com
- * "exception" no meio, e o usuário não sabe o que fazer. O caso mais
- * importante é o e-mail que já tem conta: ele aparece tanto no cadastro
- * quanto no login, e é justamente quando o usuário precisa saber que existe
- * uma conta com outra senha.
- */
 fun Throwable.paraErroAuth(): ResultadoAuth.Erro {
     val codigo = when (this) {
         is FirebaseAuthException -> errorCode.removePrefix("ERROR_").lowercase()

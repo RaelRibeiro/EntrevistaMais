@@ -86,12 +86,6 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 
-/**
- * Tela 3: o dia de entrevistas.
- *
- * O recrutador escolhe a data e vai adicionando candidatos; cada entrada já
- * nasce com um horário calculado pelas Definições padrão.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AgendaScreen(
@@ -140,8 +134,6 @@ fun AgendaScreen(
                 permitirEscolherData = { mostrarSeletorDeData = true },
             )
 
-            // Ações do dia: encerrar todo mundo já avaliado e consultar os que
-            // já foram encerrados.
             if (estado.quantidadeEncerravel > 0 || estado.encerradas.isNotEmpty()) {
                 LinhaAcoesDoDia(
                     quantidadeEncerravel = estado.quantidadeEncerravel,
@@ -249,12 +241,6 @@ fun AgendaScreen(
     }
 }
 
-/**
- * Horário individual de um candidato.
- *
- * Não mostra hora de término: o candidato ocupa uma faixa que a agenda
- * calcula, e o recrutador só precisa do começo.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DialogoHorario(
@@ -299,7 +285,6 @@ private fun DialogoHorario(
     )
 }
 
-/** Lista de números que sobe e desce, para o seletor de hora/minuto. */
 @Composable
 private fun SeletorNumero(
     valor: Int,
@@ -326,7 +311,6 @@ private fun SeletorNumero(
     }
 }
 
-/** Calendário aberto ao tocar no nome do dia. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DialogoCalendario(
@@ -556,10 +540,7 @@ private fun CartaoEntrevista(
                     style = MaterialTheme.typography.titleMedium,
                     maxLines = 2,
                 )
-                // Só o nome e o status. Telefone e horário de término poluíam a
-                // lista, e nada ali é usado para decidir quem chamar agora.
-                // O horário alterado fica marcado, senão o recrutador não
-                // entende por que o candidato saiu da sequência das Definições.
+
                 if (entrevista.inicioManual) {
                     Text(
                         text = "Horário alterado",
@@ -574,9 +555,6 @@ private fun CartaoEntrevista(
             when {
                 emAndamento -> Button(onClick = aoAbrir) { Text("Abrir") }
 
-                // Concluída ou já decidida: o botão principal vira a decisão,
-                // que é o próximo passo do recrutamento. Quando já existe
-                // decisão, mostramos a alternativa para corrigir sem refazer.
                 concluida -> Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -615,8 +593,6 @@ private fun CartaoEntrevista(
                     Icon(Icons.Filled.RestartAlt, contentDescription = "Reabrir candidato encerrado")
                 }
 
-                // Cancelada e "não compareceu" não voltam a contar tempo sozinhas:
-                // o caminho é reabrir, que devolve a entrevista para AGENDADA.
                 entrevista.status == StatusEntrevista.CANCELADA ||
                     entrevista.status == StatusEntrevista.NAO_COMPARECEU ->
                     OutlinedButton(
@@ -814,9 +790,6 @@ private fun SeloStatus(status: StatusEntrevista, modifier: Modifier = Modifier) 
         StatusEntrevista.CONCLUIDA ->
             MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
 
-        // Aprovado é o único resultado positivo do fluxo, então usa a cor de
-        // destaque. Reprovado e cancelado são negativos, "não compareceu" e
-        // "encerrada" são apenas neutros.
         StatusEntrevista.APROVADO ->
             MaterialTheme.colorScheme.primary to MaterialTheme.colorScheme.onPrimary
         StatusEntrevista.REPROVADO,

@@ -23,13 +23,6 @@ import java.time.Instant
 import java.time.LocalDate
 import kotlin.random.Random
 
-/**
- * Raiz dos dados do usuário no Firestore.
- *
- * O app escreve na mesma árvore do site: tudo vive dentro de
- * `usuarios/{uid}/...`. O uid é resolvido na hora da chamada (nunca é
- * guardado), então cada método, Fluxo ou DAO sempre aponta para o perfil logado.
- */
 internal class FirestoreFontes(
     private val firestore: FirebaseFirestore,
     private val uidProvider: ProvedorUid,
@@ -47,7 +40,6 @@ internal class FirestoreFontes(
     fun contador() = raiz().collection("_meta").document("contadores")
 }
 
-/** Observa uma query e emite o resultado a cada mudança. */
 internal fun <T> Query.fluxo(mapear: (QuerySnapshot) -> T): Flow<T> = callbackFlow {
     val ouvinte = addSnapshotListener { resultado, erro ->
         if (erro != null) {
@@ -59,7 +51,6 @@ internal fun <T> Query.fluxo(mapear: (QuerySnapshot) -> T): Flow<T> = callbackFl
     awaitClose { ouvinte.remove() }
 }
 
-/** Observa um documento e emite o resultado a cada mudança. */
 internal fun <T> DocumentReference.fluxo(mapear: (DocumentSnapshot?) -> T): Flow<T> = callbackFlow {
     val ouvinte = addSnapshotListener { documento, erro ->
         if (erro != null) {
@@ -71,29 +62,12 @@ internal fun <T> DocumentReference.fluxo(mapear: (DocumentSnapshot?) -> T): Flow
     awaitClose { ouvinte.remove() }
 }
 
-/**
- * Gera ids numéricos únicos por usuário.
- *
- * O Room usava autoincremento; aqui o id é derivado do relógio + um acaso
- * local, então dois aparelhos nunca geram o mesmo documento (e a escrita
- * offline não sobrescreve um documento já sincronizado). Vira o mesmo Long que
- * os repositórios e a interface já esperam.
- *
- * O valor fica SEMPRE abaixo de 2^53 (o site lê como número do JavaScript e
- * precisaria de exatidão): `(millis - época) * 4096 + acaso` em vez de
- * `millis shl 20`, que passa muito do limite seguro.
- */
 internal fun novoId(): Long {
     val desdeEpoca = System.currentTimeMillis() - 1704067200000L
     val acaso = Random.nextInt(1 shl 12)
     return (desdeEpoca * 4096) + acaso.toLong()
 }
 
-// ---------------------------------------------------------------------------
-// Conversão entre as entidades do Room e os documentos do Firestore.
-// ---------------------------------------------------------------------------
-
-/** Constrói um mapa pronto para set() descartando pares nulos (ausência). */
 private fun campos(vararg pares: Pair<String, Any?>): Map<String, Any> =
     pares.mapNotNull { (chave, valor) -> valor?.let { chave to it } }.toMap()
 
@@ -236,7 +210,6 @@ internal fun DocumentSnapshot.paraResposta(): RespostaEntity? {
     )
 }
 
-/** Id estável de um documento de resposta: `entrevistaId-perguntaId`. */
 internal fun idDeResposta(entrevistaId: Long, perguntaId: Long): String = "$entrevistaId-$perguntaId"
 
 internal fun RespostaEntity.camposParaFirestore(): Map<String, Any> = campos(

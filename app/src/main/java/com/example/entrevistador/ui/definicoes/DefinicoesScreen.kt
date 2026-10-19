@@ -46,12 +46,6 @@ import com.example.entrevistador.core.minutosParaHora
 import com.example.entrevistador.ui.components.CampoTexto
 import com.example.entrevistador.ui.components.CartaoSecao
 
-/**
- * Tela 2: os valores que a agenda usa para se montar sozinha.
- *
- * Tudo que é alterado aqui é reaplicado aos dias que já têm entrevistas, então o
- * recrutador não precisa reorganizar nada à mão.
- */
 @Composable
 fun DefinicoesScreen(
     viewModel: DefinicoesViewModel,
@@ -179,12 +173,6 @@ fun DefinicoesScreen(
     }
 }
 
-/**
- * Campo de hora que abre um relógio de verdade.
- *
- * Antes eram botões de +15/-15, que obrigavam a apertar várias vezes para chegar
- * em 08:47. O seletor permite escolher o minuto diretamente.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SeletorHora(
@@ -202,8 +190,7 @@ private fun SeletorHora(
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        // `Surface(onClick = ...)` em vez de `OutlinedTextField` + `.clickable`:
-        // o campo de texto engolia o toque e o relógio não abria.
+
         Surface(
             onClick = { relogioAberto = true },
             modifier = Modifier
@@ -243,10 +230,6 @@ private fun SeletorHora(
     }
 }
 
-/**
- * Almoço: início e fim na mesma linha, porque os dois andam juntos.
- * É um único bloco visual "Almoço", e não dois campos soltos.
- */
 @Composable
 private fun SeletorIntervaloAlmoco(
     minutosInicio: Int,
@@ -309,14 +292,6 @@ private fun SeletorIntervaloAlmoco(
     }
 }
 
-/**
- * Campo somente de leitura que mostra a hora e abre o relógio ao toque.
- *
- * Não é um `OutlinedTextField`: um campo de texto, mesmo `readOnly`, consome o
- * toque para posicionar o cursor e o `.clickable` nunca era disparado — por isso
- * o horário do almoço não abria o relógio. Aqui é uma `Surface` com borda e
- * `clickable`, que entrega o toque de fato.
- */
 @Composable
 private fun CampoHora(
     rotulo: String,

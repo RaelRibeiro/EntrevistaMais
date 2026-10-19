@@ -14,14 +14,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 
-/**
- * Login real com o Firebase — a mesma conta do site Entrevista+.
- *
- * A sessão é mantida pelo [FirebaseAuth] (armazenamento próprio, desconta o
- * login ao abrir o app). Sempre que o usuário entra, o perfil é gravado de novo
- * em `usuarios/{uid}` com nome e e-mail, criando a raiz onde o Firestore do app
- * (entrevistas, vagas, roteiros...) e do site compartilham os dados.
- */
 class FirebaseAuthRepository(
     private val auth: FirebaseAuth,
     private val firestore: com.google.firebase.firestore.FirebaseFirestore,
@@ -62,11 +54,6 @@ class FirebaseAuthRepository(
         }
     }
 
-    /**
-     * Completa o login com o idToken vindo da tela (GoogleSignIn do Google).
-     * A tela fica com o fluxo do play-services-auth; aqui só trocamos o token
-     * pela credencial do Firebase.
-     */
     override suspend fun entrarComGoogle(idToken: String): ResultadoAuth {
         return try {
             val credencial = GoogleAuthProvider.getCredential(idToken, null)
@@ -104,18 +91,6 @@ class FirebaseAuthRepository(
         e.paraErroAuth()
     }
 
-    /**
-     * Cria/atualiza o documento `usuarios/{uid}` com o perfil exibido.
-     *
-     * É a mesma estrutura que o site usa — é o que liga os dados dos dois
-     * produtos sob a mesma conta.
-     *
-     * Usa `merge` de propósito: um `set` sem opções sobrescreveria o documento
-     * inteiro e apagaria campos que o site grava, como o `criadoEm`. E um
-     * campo só é enviado quando tem valor, porque muita conta antiga foi criada
-     * fora do app e não tem nome de exibição — sobrescrever o nome com vazio
-     * apagaria o nome que o usuário já tinha.
-     */
     private suspend fun gravarPerfil(nome: String, email: String) {
         val uid = auth.currentUser?.uid ?: return
         val campos = mutableMapOf<String, Any>()

@@ -9,7 +9,6 @@ export function horaParaMinutos(hora: string): number {
   return h * 60 + m;
 }
 
-/** Hoje no fuso do navegador, no formato ISO (yyyy-mm-dd) salvo no banco. */
 export function hojeIso(): string {
   const agora = new Date();
   const offset = agora.getTimezoneOffset();
@@ -28,7 +27,6 @@ export function formatarTelefone(telefone: string): string {
   return telefone;
 }
 
-/** Converte um valor salvo no Firestore de volta para `number`. */
 export function numero(valor: unknown): number {
   if (typeof valor === 'number') return valor;
   const numeroFirestore = valor as { toNumber?: () => number } | null;
@@ -46,7 +44,6 @@ const DIAS_SEMANA = [
   'Sábado',
 ];
 
-/** "540" -> "9h" / "45min" / "9h15min". */
 export function minutosParaHoraComSufixo(minutos: number): string {
   const horas = Math.floor(minutos / 60);
   const resto = minutos % 60;
@@ -55,14 +52,12 @@ export function minutosParaHoraComSufixo(minutos: number): string {
   return `${resto}min`;
 }
 
-/** "12/03/2026" a partir de uma data ISO (yyyy-mm-dd). */
 export function paraTexto(data: string): string {
   const [ano, mes, dia] = data.split('-');
   if (!ano || !mes || !dia) return data;
   return `${dia}/${mes}/${ano}`;
 }
 
-/** "Quinta-feira" a partir de uma data ISO (yyyy-mm-dd). */
 export function paraDiaDaSemana(data: string): string {
   const [ano, mes, dia] = data.split('-').map(Number);
   if (!ano || !mes || !dia) return '';
@@ -70,7 +65,6 @@ export function paraDiaDaSemana(data: string): string {
   return DIAS_SEMANA[local.getDay()] ?? '';
 }
 
-/** "Hoje - quinta-feira", "Amanhã - sexta-feira" ou "12/03/2026 - quinta-feira". */
 export function paraTituloAgenda(data: string): string {
   const amanha = new Date();
   amanha.setDate(amanha.getDate() + 1);

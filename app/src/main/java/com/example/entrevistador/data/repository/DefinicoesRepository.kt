@@ -6,22 +6,10 @@ import com.example.entrevistador.domain.model.DefinicoesPadrao
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.tasks.await
 
-/**
- * Só o que a [EntrevistaRepository] precisa saber.
- *
- * Existe para permitir testar o cálculo de agenda sem abrir o Firestore — o
- * repositório em si continua sendo quem lê e grava os valores.
- */
 interface ProvedorDefinicoes {
     suspend fun obter(): DefinicoesPadrao
 }
 
-/**
- * Valores padrão do recrutador, guardados no Firestore (`usuarios/{uid}`).
- *
- * É o mesmo critério de antes: qualquer mudança aqui é aplicada na agenda por
- * quem consome (os horários são recalculados via [EntrevistaRepository]).
- */
 class DefinicoesRepository internal constructor(private val fontes: FirestoreFontes) : ProvedorDefinicoes {
 
     private val documento get() = fontes.definicoes()
@@ -30,7 +18,6 @@ class DefinicoesRepository internal constructor(private val fontes: FirestoreFon
         documentoSalvo?.paraDefinicoes() ?: DefinicoesPadrao.PADRAO
     }
 
-    /** Lê do Firestore direto (uma viagem), sem esperar pelo Flow. */
     override suspend fun obter(): DefinicoesPadrao {
         val documentoSalvo = runCatching { documento.get().await() }.getOrNull()
         return documentoSalvo?.let { it.paraDefinicoes() } ?: DefinicoesPadrao.PADRAO

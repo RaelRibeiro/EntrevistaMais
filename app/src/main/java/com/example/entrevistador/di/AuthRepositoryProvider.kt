@@ -7,13 +7,6 @@ import com.example.entrevistador.data.firebase.Firebase
 import com.example.entrevistador.data.firebase.FirebaseAuthRepository
 import com.example.entrevistador.data.firebase.FirestoreFontes
 
-/**
- * Escolhe qual [AuthRepository] usar.
- *
- * O app usa sempre o Firebase: autentica com a mesma conta do site e grava os
- * dados em `usuarios/{uid}`. Nenhuma tela precisa saber disso — o login é o
- * [FirebaseAuthRepository] e o resto da camada de dados é Firestore.
- */
 object AuthRepositoryProvider {
 
     fun criar(context: Context): AuthRepository {
@@ -25,7 +18,6 @@ object AuthRepositoryProvider {
     }
 }
 
-/** Constrói as fontes Firestore do usuário (DAOs, definições, currículos). */
 internal fun fontesFirestore(context: Context): FirestoreFontes {
     val appContext = context.applicationContext
     return FirestoreFontes(

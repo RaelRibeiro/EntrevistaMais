@@ -32,13 +32,11 @@ export default function PaginaRoteiro() {
     return observarVagas(uid, setVagas);
   }, [uid]);
 
-  // Igual ao app: o roteiro padrão nasce com as 29 perguntas no primeiro acesso.
   useEffect(() => {
     if (!uid) return;
     void garantirRoteiroPadrao(uid);
   }, [uid]);
 
-  // Perguntas de roteiros que já estão em tela.
   useEffect(() => {
     if (!uid) return;
     const desativar: (() => void)[] = [];

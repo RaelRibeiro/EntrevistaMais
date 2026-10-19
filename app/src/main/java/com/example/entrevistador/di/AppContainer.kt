@@ -24,13 +24,6 @@ import com.example.entrevistador.data.repository.EntrevistaRepository
 import com.example.entrevistador.data.repository.RoteiroRepository
 import com.example.entrevistador.data.repository.VagaRepository
 
-/**
- * Injeção de dependência manual.
- *
- * Deliberadamente sem Hilt: o grafo é pequeno e explícito, o build fica mais
- * rápido e não há uma etapa de geração de código para entender. Se um dia o
- * grafo crescer, trocar por Hilt mexe só este arquivo e os ViewModels.
- */
 interface AppContainer {
     val authRepository: AuthRepository
     val definicoesRepository: DefinicoesRepository
@@ -42,16 +35,6 @@ interface AppContainer {
     val curriculoPaginasRepository: CurriculoPaginasRepository
 }
 
-/**
- * Backend do app é o Firebase (mesmo projeto do site):
- *  - login e sessão via [FirebaseAuth];
- *  - dados (entrevistas, vagas, roteiros, respostas) no Firestore
- *    em `usuarios/{uid}`;
- *  - currículos anexados no Firestore.
- *
- * As interfaces `@Dao` continuam sendo o contrato dos repositórios — a troca de
- * Room para Firestore acontece só aqui, e os testes com fakes seguem intactos.
- */
 class DefaultAppContainer(context: Context) : AppContainer {
 
     private val appContext = context.applicationContext

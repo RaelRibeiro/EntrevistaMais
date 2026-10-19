@@ -3,27 +3,10 @@ package com.example.entrevistador.domain
 import com.example.entrevistador.domain.model.DefinicoesPadrao
 import com.example.entrevistador.domain.model.Entrevista
 
-/**
- * Calcula os horários da agenda automaticamente.
- *
- * Regras, na ordem em que são aplicadas a cada candidato:
- *  1. A primeira entrevista começa no "Horário de Início" definido.
- *  2. Cada entrevista ocupa "Duração por Entrevista" minutos, mais
- *     "Intervalo" entre uma e outra.
- *  3. Se o horário cair dentro da janela de almoço, ele é empurrado para o fim
- *     do almoço (ninguém é entrevistado no meio do almoço).
- *  4. Depois de "Quantidade por dia" entrevistas, o dia está lotado — os
- *     candidatos excedentes são ignorados.
- */
 object AgendaScheduler {
 
     const val MINUTOS_NO_DIA = 24 * 60
 
-    /**
-     * Devolve os minutos de início de cada entrevista, na ordem em que
-     * [candidatos] foram informados. A lista devolvida pode ser menor que a de
-     * entrada se o dia lotar.
-     */
     fun calcularHorarios(
         definicoes: DefinicoesPadrao,
         candidatos: List<Candidato>,
@@ -40,13 +23,10 @@ object AgendaScheduler {
         for (candidato in candidatos) {
             if (resultado.size >= limite) break
 
-            // Não deixa a entrevista começar dentro (nem cruzar) o almoço.
             if (cursor < almocoFim && cursor + duracao > almocoInicio) {
                 cursor = almocoFim
             }
 
-            // A entrevista precisa caber antes da meia-noite: uma entrevista que
-            // termina exatamente às 24:00 não é agendável.
             if (cursor + duracao >= MINUTOS_NO_DIA) break
 
             resultado += InicioCalculado(
@@ -60,10 +40,6 @@ object AgendaScheduler {
         return resultado
     }
 
-    /**
-     * Recalcula os horários de uma lista de entrevistas já existente, preservando
-     * a ordem ([Entrevista.ordem]) e o que já foi preenchido.
-     */
     fun recalcular(
         definicoes: DefinicoesPadrao,
         entrevistas: List<Entrevista>,
@@ -85,11 +61,9 @@ object AgendaScheduler {
             )
         }
 
-        // Entrevistas que ficaram fora do limite do dia saem da agenda.
         return resultado
     }
 
-    /** Máximo de candidatos que ainda cabem no dia, ignorando a lista atual. */
     fun capacidadeDoDia(definicoes: DefinicoesPadrao): Int {
         val duracao = definicoes.duracaoMinutos.coerceAtLeast(1)
         val passo = duracao + definicoes.intervaloMinutos.coerceAtLeast(0)

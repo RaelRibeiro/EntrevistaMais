@@ -28,7 +28,6 @@ const VAZIA: Omit<Vaga, 'id' | 'criadoEm'> = {
   limiteCandidatos: 0,
 };
 
-// Mesmas opções do aplicativo — nada de digitar texto livre.
 const OPCOES_CONTRATO = [
   'CLT',
   'PJ',

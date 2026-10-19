@@ -84,14 +84,6 @@ import com.example.entrevistador.ui.components.CampoTexto
 import com.example.entrevistador.ui.components.CartaoSecao
 import com.example.entrevistador.ui.components.TituloSecao
 
-/**
- * Tela 4: a entrevista em andamento.
- *
- * Antes de começar mostra o perfil do candidato; durante, mostra o cronômetro e
- * as abas Currículo e Roteiro. O roteiro é uma sequência de perguntas — as de
- * resposta automática (dia/hora, nome, dados da vaga) já vêm preenchidas, e a
- * experiência profissional vira uma tabela.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EntrevistaScreen(
@@ -160,10 +152,7 @@ fun EntrevistaScreen(
         }
 
         val densidade = LocalDensity.current
-        // O teclado vira espaço rolável no fim da lista em vez de encolher a
-        // janela. Com `imePadding()` no container, cada tecla digitada
-        // redimensionava a área visível e o campo sob o cursor era rolado de
-        // novo pelo Compose: a tela "balançava" enquanto se digitava.
+
         val espacoDoTeclado = with(densidade) { WindowInsets.ime.getBottom(this).toDp() }
 
         Column(
@@ -184,10 +173,6 @@ fun EntrevistaScreen(
                 )
             }
 
-            // "finalizada" cobre concluída, aprovada, reprovada, encerrada,
-            // cancelada e não compareceu: em todos esses casos a entrevista já
-            // aconteceu, e a tela oferece o resumo com a opção de reabrir em
-            // vez do botão de começar.
             if (!estado.emAndamento && !entrevista.status.finalizada) {
                 BotaoIniciar(
                     aoClicar = viewModel::iniciar,
@@ -236,8 +221,7 @@ fun EntrevistaScreen(
                         seletorArquivo.launch(AnexoRepository.TIPOS_ACEITOS.toTypedArray())
                     },
                     aoAbrirArquivo = {
-                        // Imagem abre direto; PDF vai para o visualizador que
-                        // converte cada página em imagem.
+
                         val alvo = estado.entrevista
                         if (alvo != null && alvo.temArquivoCurriculo) {
                             if (alvo.tipoCurriculo == TipoCurriculo.PDF) {
@@ -270,8 +254,6 @@ fun EntrevistaScreen(
                 }
             }
 
-            // Respiro para o teclado: o último campo continua alcançável pelo
-            // scroll, sem precisar encolher a janela a cada tecla.
             Spacer(Modifier.height(espacoDoTeclado))
         }
     }
@@ -296,7 +278,6 @@ fun EntrevistaScreen(
     }
 }
 
-/** Cartão do candidato: nome, telefone com máscara e data/hora da entrevista. */
 @Composable
 private fun PerfilCandidato(estado: EstadoEntrevista, entrevista: Entrevista) {
     Card(
@@ -329,8 +310,7 @@ private fun PerfilCandidato(estado: EstadoEntrevista, entrevista: Entrevista) {
                     modifier = Modifier.size(18.dp),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                // Uma linha só, sempre mascarado: quebrar o número no meio
-                // atrapalha na hora de ligar.
+
                 Text(
                     text = formatarTelefone(entrevista.telefone),
                     style = MaterialTheme.typography.bodyLarge,
@@ -482,8 +462,6 @@ private fun ResumoFinalizado(
                 )
             }
 
-            // A decisão só faz sentido depois da entrevista: quem já tem
-            // decisão pode trocá-la, e quem foi encerrado volta para concluída.
             Row(
                 modifier = Modifier.padding(top = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -514,9 +492,6 @@ private fun ResumoFinalizado(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            // Reabrir devolve o candidato para agendado, editável e pronto para
-            // começar de novo. Sem isto, a única forma de voltar atrás era
-            // iniciar de novo, o que zera as respostas sem avisar.
             TextButton(
                 onClick = aoReabrir,
                 modifier = Modifier.padding(top = 8.dp),
@@ -667,8 +642,6 @@ private fun AbaRoteiro(estado: EstadoEntrevista, viewModel: EntrevistaViewModel)
         return
     }
 
-    // Depois de concluída, aprovada, reprovada ou encerrada, a entrevista vira
-    // registro: as respostas continuam visíveis, mas não podem mais mudar.
     val somenteLeitura = estado.entrevista?.status != StatusEntrevista.AGENDADA &&
         estado.entrevista?.status != StatusEntrevista.EM_ANDAMENTO
 
@@ -714,7 +687,6 @@ private fun AbaRoteiro(estado: EstadoEntrevista, viewModel: EntrevistaViewModel)
     }
 }
 
-/** Resumo da vaga no topo do roteiro, preenchido a partir do cadastro de vagas. */
 @Composable
 private fun BlocoVaga(vaga: Vaga?) {
     if (vaga == null) {
@@ -753,10 +725,6 @@ private fun ItemDaVaga(rotulo: String, valor: String) {
     }
 }
 
-/**
- * Um campo por pergunta. Pergunta com [RespostaAutomatica] mostra o valor que o
- * app preencheu e permite sobrescrever.
- */
 @Composable
 private fun CampoPergunta(
     pergunta: Pergunta,
@@ -861,14 +829,6 @@ private fun OpcoesSimNao(
     }
 }
 
-/**
- * Mini tabela "locais onde trabalhou": Local, Ano, Duração, Cargo e Motivo da
- * saída. Uma linha por emprego, com o botão de adicionar no fim.
- *
- * Cada emprego vira um cartão com os campos empilhados e rotulados, em vez de
- * uma linha com cinco colunas: numa tela de celular as colunas ficavam com
- * poucos pixels de largura e o texto aparecia cortado ("só umas letras jogadas").
- */
 @Composable
 private fun TabelaExperiencias(
     estado: EstadoEntrevista,
@@ -897,7 +857,6 @@ private fun TabelaExperiencias(
     }
 }
 
-/** Um emprego: campos empilhados, com o rótulo sempre visível acima do valor. */
 @Composable
 private fun CartaoLinhaTabela(
     indice: Int,
@@ -919,9 +878,7 @@ private fun CartaoLinhaTabela(
             modifier = Modifier.padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            // Local e Ano dividem a largura porque os dois são curtos; Cargo e
-            // Motivo da saída ficam inteiros na linha de baixo, que é o campo
-            // que mais sofria com o espremimento.
+
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Celula(
                     valor = linha.local,

@@ -32,10 +32,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.text.KeyboardOptions
 import com.example.entrevistador.core.aplicarMascaraTelefone
 
-/**
- * Campo de texto padrão do app, com rótulo, erro e suporte a senha.
- * Concentrar isso aqui evita repetir a mesma configuração em todas as telas.
- */
 @Composable
 fun CampoTexto(
     valor: String,
@@ -51,22 +47,13 @@ fun CampoTexto(
     numerico: Boolean = false,
     telefone: Boolean = false,
     acaoDoTeclado: ImeAction = ImeAction.Next,
-    /**
-     * Mostra o valor mas não deixa editar. Usado no roteiro depois que a
-     * entrevista é finalizada: as respostas ficam visíveis, mas o registro não
-     * pode mais mudar.
-     */
+
     somenteLeitura: Boolean = false,
 ) {
     var senhaVisivel by remember { mutableStateOf(false) }
 
-    // A máscara do telefone precisa controlar o cursor. Com um `String` simples,
-    // o Compose recalcula a seleção a cada reformatação e o dígito novo acaba
-    // caindo ATRÁS do número já digitado. Guardando um `TextFieldValue` e fixando
-    // a seleção no fim do texto, a escrita sempre segue da esquerda para a direita.
     var campo by remember { mutableStateOf(TextFieldValue(valor, TextRange(valor.length))) }
 
-    // Sincroniza quando o valor muda de fora (ex.: ao carregar o candidato salvo).
     LaunchedEffect(valor) {
         if (campo.text != valor) {
             campo = TextFieldValue(valor, TextRange(valor.length))
@@ -127,7 +114,6 @@ fun CampoTexto(
     )
 }
 
-/** Título de seção, usado para agrupar blocos dentro das telas. */
 @Composable
 fun TituloSecao(
     texto: String,
@@ -155,7 +141,6 @@ fun TituloSecao(
     }
 }
 
-/** Cartão com título, usado para os blocos de definição e detalhe. */
 @Composable
 fun CartaoSecao(
     titulo: String,

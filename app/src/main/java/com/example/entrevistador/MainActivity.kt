@@ -58,14 +58,6 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-/**
- * Raiz do app.
- *
- * A sessão é observada do [com.example.entrevistador.data.auth.AuthRepository]
- * (Firebase), e não de um estado local: por isso criar conta, entrar e sair já
- * trocam a tela sem nenhum código extra aqui. [SessaoCarregando] cobre o
- * primeiro acesso à sessão, que é rápido mas assíncrono.
- */
 @Composable
 fun AppEntrevistaMais(container: AppContainer) {
     val usuario by container.authRepository.usuarioAtual.collectAsStateWithLifecycle(
@@ -73,8 +65,7 @@ fun AppEntrevistaMais(container: AppContainer) {
     )
 
     when {
-        // Enquanto a primeira leitura do DataStore não volta, mostramos um
-        // spinner em vez de piscar a tela de login para quem já está logado.
+
         usuario == Carregando -> TelaDeEspera()
         usuario == null -> FluxoLogin(container)
         else -> FluxoLogado(container, requireNotNull(usuario))
@@ -167,8 +158,6 @@ private fun FluxoLogado(container: AppContainer, usuario: Usuario) {
                 )
             }
 
-            // Roteiro próprio de uma vaga. A chave é a vaga, para que trocar de
-            // uma vaga para outra não mostre o rascunho da anterior.
             composable(
                 route = Rotas.ROTEIRO_DA_VAGA,
                 arguments = listOf(navArgument(Rotas.ARG_VAGA_ID) { type = NavType.LongType }),
@@ -212,8 +201,6 @@ private fun FluxoLogado(container: AppContainer, usuario: Usuario) {
                 )
             }
 
-            // Currículo em tela cheia. O PDF é convertido em imagens pela
-            // repository, que guarda cada página no cache.
             composable(
                 route = Rotas.CURRICULO,
                 arguments = listOf(navArgument(Rotas.ARG_ENTREVISTA_ID) { type = NavType.LongType }),
@@ -245,10 +232,6 @@ private fun FluxoLogado(container: AppContainer, usuario: Usuario) {
     }
 }
 
-/**
- * Fábrica mínima para criar ViewModels com dependências do [AppContainer].
- * Evita trazer Hilt (e uma etapa de geração de código) só para isto.
- */
 @Composable
 private inline fun <reified T : ViewModel> criarViewModel(
     container: AppContainer,
@@ -262,11 +245,8 @@ private inline fun <reified T : ViewModel> criarViewModel(
     },
 )
 
-/** Marcador do estado "ainda não sei se existe sessão" (válido enquanto o uid é vazio). */
 private val Carregando = Usuario(uid = "", nome = "", email = "")
 
-/** Chave usada para levar o caminho do currículo até o visualizador. */
 private const val CAMINHO_CURRICULO = "caminhoCurriculo"
 
-/** Chave com o nome do candidato, usado no título do visualizador. */
 private const val NOME_CANDIDATO = "nomeCandidato"

@@ -22,13 +22,6 @@ import org.junit.Test
 import java.time.Instant
 import java.time.LocalDate
 
-/**
- * Regressão do crash "o app fecha ao adicionar candidato".
- *
- * O bug: ao recalcular os horários, o mapa de ids era montado com a lista
- * lida *antes* do insert, mas a iteração usava a lista *depois*. O candidato
- * novo não existia no mapa e `getValue` estourava NoSuchElementException.
- */
 class EntrevistaRepositoryTest {
 
     private val hoje = LocalDate.of(2026, 3, 10)
@@ -97,7 +90,6 @@ class EntrevistaRepositoryTest {
         override suspend fun obter(): DefinicoesPadrao = valor
     }
 
-    /** Guarda o que as tabelas filhas recebem, para o teste conferir a limpeza. */
     private class DadosFilhos {
         val respostas = mutableMapOf<Long, MutableMap<Long, String>>()
         val experiencias = mutableMapOf<Long, MutableList<ExperienciaEntity>>()
@@ -369,10 +361,6 @@ class EntrevistaRepositoryTest {
         assertEquals(StatusEntrevista.EM_ANDAMENTO, dao.todas.single().status)
     }
 
-    /**
-     * Regressão: as respostas e a tabela de locais ficavam órfãs no banco depois
-     * da remoção, apontando para um candidato que já não existe.
-     */
     @Test
     fun `remover candidato apaga tambem as respostas e a tabela de locais`() = runBlocking {
         val dao = DaoFalso()
@@ -418,8 +406,6 @@ class EntrevistaRepositoryTest {
             resultado,
         )
     }
-
-    // --- aprovar / reprovar / encerrar ---
 
     @Test
     fun `aprovar move a entrevista concluida para a proxima fase`() = runBlocking {
@@ -490,7 +476,6 @@ class EntrevistaRepositoryTest {
 
         repository.finalizar(ids[0], agora)
         repository.cancelar(ids[1])
-        // ids[2] continua agendada, sem entrevista.
 
         assertEquals(1, repository.encerrarAvaliadosDoDia(hoje))
 
@@ -547,7 +532,7 @@ class EntrevistaRepositoryTest {
 
         val restaurada = dao.todas.single()
         assertEquals(StatusEntrevista.CONCLUIDA, restaurada.status)
-        // O tempo real continua salvo: encerrar não desfaz a entrevista.
+
         assertEquals(1_800_000L, restaurada.paraDominio().duracaoRealMs)
     }
 

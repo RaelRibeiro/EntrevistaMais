@@ -16,14 +16,6 @@ import java.security.SecureRandom
 
 private val Context.dataStoreContas: DataStore<Preferences> by preferencesDataStore("contas")
 
-/**
- * Login local, 100% offline — é a implementação padrão do app.
- *
- * A senha nunca é guardada em texto puro: geramos um sal aleatório por conta e
- * guardamos apenas SHA-256(sal + senha). Isso é suficiente para um app que roda
- * só no aparelho; se um dia a conta precisar sincronizar entre dispositivos, o
- * ponto de troca é o [AuthRepository] (Firebase).
- */
 class LocalAuthRepository(
     private val context: Context,
     private val sessionStore: SessionStore,
@@ -131,7 +123,6 @@ class LocalAuthRepository(
         const val MINIMO_SENHA = 6
         val REGEX_EMAIL = Regex("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")
 
-        /** E-mail é a chave da conta, então é sempre guardado em minúsculas. */
         fun normalizar(email: String): String = email.trim().lowercase()
     }
 }

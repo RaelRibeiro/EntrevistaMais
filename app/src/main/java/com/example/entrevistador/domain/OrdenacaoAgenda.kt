@@ -7,19 +7,8 @@ import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
 
-/**
- * Ordem em que as entrevistas aparecem na agenda.
- *
- * O recrutador precisa ver primeiro o que está acontecendo agora, depois o que
- * vem a seguir (mais próximo para o mais longe), e só no fim o histórico. Por
- * isso as entrevistas já avaliadas e as encerradas vão para o fim, em vez de
- * ficarem misturadas com as próximas.
- */
 object OrdenacaoAgenda {
 
-    /**
-     * Faixa de prioridade: quanto menor, mais perto do topo.
-     */
     fun faixa(status: StatusEntrevista): Int = when (status) {
         StatusEntrevista.EM_ANDAMENTO -> 0
         StatusEntrevista.AGENDADA -> 1
@@ -40,12 +29,11 @@ object OrdenacaoAgenda {
         return entrevistas.sortedWith(
             compareBy<Entrevista> { faixa(it.status) }
                 .thenBy { entrevista ->
-                    // Interview happening right now comes first inside its faixa.
+
                     if (entrevista.status == StatusEntrevista.EM_ANDAMENTO) 0 else 1
                 }
                 .thenBy { entrevista ->
-                    // "Mais próximo" = menor distância até agora. O que já passou
-                    // fica logo atrás do que está por vir.
+
                     distanciaMinutos(entrevista, agoraLocal)
                 }
                 .thenBy { it.ordem }
@@ -53,22 +41,14 @@ object OrdenacaoAgenda {
         )
     }
 
-    /**
-     * Distância usada só para ordenar: quanto menor, mais perto do topo.
-     *
-     * Faixas reservadas para não misturar os grupos (valores pequenos, sem risco
-     * de overflow): hoje em [0, 500_000), dias futuros a partir de 1_000_000 e
-     * dias passados a partir de 2_000_000.
-     */
     private fun distanciaMinutos(entrevista: Entrevista, agora: LocalDateTime): Long {
         val dias = agora.toLocalDate().toEpochDay() - entrevista.data.toEpochDay()
-        if (dias < 0) return 1_000_000L - dias // dia futuro
-        if (dias > 0) return 2_000_000L - dias // dia passado
+        if (dias < 0) return 1_000_000L - dias
+        if (dias > 0) return 2_000_000L - dias
 
         val inicio = LocalDateTime.of(entrevista.data, entrevista.horaInicio)
         val minutos = Duration.between(agora, inicio).toMinutes()
-        // O que já começou fica logo atrás do que está por vir, sem nunca
-        // ultrapassar o bloco de "hoje".
+
         return if (minutos < 0) 500_000L + minutos else minutos
     }
 }

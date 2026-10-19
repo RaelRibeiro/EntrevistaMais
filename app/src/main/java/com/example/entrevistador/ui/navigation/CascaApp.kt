@@ -21,7 +21,6 @@ import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
 
-/** Casca com TopAppBar e barra de navegação inferior para as telas do app logado. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CascaApp(
@@ -75,16 +74,6 @@ fun NavHostController.navegarPara(rota: String) {
     }
 }
 
-/**
- * Abre a entrevista de um candidato.
- *
- * Não pode usar o mesmo caminho de [navegarPara]: aquele guarda e restaura o
- * estado das telas para a barra inferior, e o Navigation só mantém UM estado
- * salvo por rota. Como toda entrevista compartilha a rota `entrevista/{id}`, o
- * ViewModelStore de um candidato era restaurado ao abrir outro — e o candidato
- * novo aparecia com os dados do anterior, mesmo de quem já tinha sido apagado.
- * Aqui cada abertura parte de um back stack limpo, com estado próprio.
- */
 fun NavHostController.abrirEntrevista(id: Long) {
     navigate(Rotas.entrevista(id))
 }

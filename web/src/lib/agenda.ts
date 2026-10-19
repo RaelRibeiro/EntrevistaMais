@@ -1,14 +1,5 @@
 import type { Definicoes, Entrevista } from './tipos';
 
-/**
- * Calcula os horários da agenda automaticamente, igual ao app.
- *
- * Regras, na ordem em que são aplicadas a cada candidato:
- *  1. A primeira entrevista começa no horário de início definido.
- *  2. Cada entrevista ocupa a duração definida, mais o intervalo entre uma e outra.
- *  3. Se o horário cruzar a janela de almoço, é empurrado para o fim do almoço.
- *  4. Depois da quantidade por dia, o dia está lotado.
- */
 export const MINUTOS_NO_DIA = 24 * 60;
 
 export interface Candidato {
@@ -93,10 +84,6 @@ export function recalcular(
   return resultado;
 }
 
-/**
- * Converte as Definições salvas no Firestore para o formato de cálculo. As
- * gravações do app usam `horarioInicioMinutos`; o cálculo usa `inicioMinutos`.
- */
 export function paraAgenda(definicoes: Definicoes): DefinicoesDaAgenda {
   return {
     inicioMinutos: definicoes.horarioInicioMinutos,

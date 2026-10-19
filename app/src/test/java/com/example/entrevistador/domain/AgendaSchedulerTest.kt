@@ -7,10 +7,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
 
-/**
- * Testes do cálculo de horários — é a regra que faz a agenda se organizar
- * sozinha, então vale travar o comportamento aqui.
- */
 class AgendaSchedulerTest {
 
     private fun padrao(
@@ -52,7 +48,7 @@ class AgendaSchedulerTest {
 
     @Test
     fun `pula o almoco quando a entrevista cairia dentro dele`() {
-        // 09:00, 09:45, 10:30, 11:15 e a próxima seria 12:00 (dentro do almoço).
+
         val horarios = AgendaScheduler.calcularHorarios(
             padrao(quantidade = 6, duracao = 45, almocoInicio = 12 * 60, almocoFim = 13 * 60),
             candidatos(6),
@@ -60,9 +56,9 @@ class AgendaSchedulerTest {
 
         assertEquals(9 * 60, horarios[0].inicioMinutos)
         assertEquals(11 * 60 + 15, horarios[3].inicioMinutos)
-        // Nenhuma entrevista começa entre 12:00 e 13:00.
+
         assertTrue(horarios.none { it.inicioMinutos in (12 * 60 until 13 * 60) })
-        // A que foi empurrada começa logo depois do almoço.
+
         assertEquals(13 * 60, horarios[4].inicioMinutos)
     }
 
@@ -73,7 +69,6 @@ class AgendaSchedulerTest {
             candidatos(4),
         )
 
-        // 09:00-10:00, 10:00-11:00, 11:00-12:00 (encaixa exato, não atravessa).
         assertEquals(listOf(9 * 60, 10 * 60, 11 * 60, 13 * 60), horarios.map { it.inicioMinutos })
     }
 
@@ -118,7 +113,7 @@ class AgendaSchedulerTest {
 
     @Test
     fun `capacidade do dia considera o almoco`() {
-        // 09:00, 09:45, 10:30, 11:15 => 4 antes do almoço; 13:00 e 13:45 => 6.
+
         assertEquals(6, AgendaScheduler.capacidadeDoDia(padrao(quantidade = 6, duracao = 45)))
     }
 }

@@ -10,7 +10,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-/** Campos da tela de login e de criação de conta. */
 data class EstadoAuth(
     val nome: String = "",
     val email: String = "",
@@ -67,7 +66,7 @@ class AuthViewModel(private val authRepository: AuthRepository) : ViewModel() {
                     _estado.update { it.copy(carregando = false, erroGeral = resultado.mensagem) }
 
                 ResultadoAuth.Sucesso ->
-                    // A navegação reage à sessão; aqui só liberamos o formulário.
+
                     _estado.update { it.copy(carregando = false) }
             }
         }
@@ -108,7 +107,6 @@ class AuthViewModel(private val authRepository: AuthRepository) : ViewModel() {
         }
     }
 
-    /** Entra com a conta Google, usando o idToken vindo da tela. */
     fun entrarComGoogle(idToken: String) {
         if (idToken.isBlank()) return
         _estado.update { it.copy(carregando = true, erroGeral = null) }

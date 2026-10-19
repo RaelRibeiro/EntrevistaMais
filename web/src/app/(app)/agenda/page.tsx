@@ -34,16 +34,6 @@ function aplicarMascaraTelefone(entrada: string): string {
   return `(${digitos.slice(0, 2)}) ${digitos.slice(2, 7)}-${digitos.slice(7)}`;
 }
 
-/**
- * Atributos que impedem o navegador de abrir o preenchimento automático sobre os
- * campos da agenda.
- *
- * `autoComplete="off"` sozinho não basta: o Chrome ignora esse valor em quase
- * todos os campos e ainda assim mostra a lista do Google por cima do texto. A
- * combinação abaixo resolve — `one-time-code` marca o campo como "não
- * preenchível", e `data-1p-ignore`/`data-lpignore` cobrem os gerenciadores de
- * senha que fazem o mesmo.
- */
 const SEM_AUTOFILL = {
   autoComplete: 'off' as const,
   'data-1p-ignore': true,

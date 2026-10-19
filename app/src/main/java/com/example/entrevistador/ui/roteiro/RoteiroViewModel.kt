@@ -22,35 +22,20 @@ import kotlinx.coroutines.launch
 
 data class EstadoRoteiro(
     val carregando: Boolean = true,
-    /** Roteiro em edição: o da vaga se ela tiver um, o padrão do processo se não. */
+
     val roteiro: Roteiro? = null,
     val editando: Boolean = false,
     val rascunhoTitulo: String = "",
     val perguntas: List<Pergunta> = emptyList(),
     val salvo: Boolean = false,
     val mensagem: String? = null,
-    /** Verdadeiro quando esta tela edita o roteiro de uma vaga, não o padrão. */
+
     val ehDaVaga: Boolean = false,
     val tituloVaga: String = "",
-    /**
-     * A vaga ainda não tem roteiro próprio e está herdando o padrão do
-     * processo. Só nesse caso faz sentido oferecer "voltar ao padrão".
-     */
+
     val usaRoteiroPadrao: Boolean = false,
 )
 
-/**
- * Edição do roteiro: lista de perguntas, na ordem em que serão feitas.
- *
- * A mesma tela atende dois casos:
- *  - [vagaId] nulo: o roteiro padrão do processo, que serve de base para todos.
- *  - [vagaId] preenchido: o roteiro próprio da vaga. Ele começa como cópia do
- *    padrão e, a partir daí, só vale para aquela vaga.
- *
- * Uma vaga que nunca foi editada não tem roteiro guardado: ela mostra o padrão
- * e continua acompanhando as mudanças dele. A cópia só nasce quando o
- * recrutador edita.
- */
 class RoteiroViewModel(
     private val repository: RoteiroRepository,
     private val vagaId: Long? = null,
@@ -61,12 +46,10 @@ class RoteiroViewModel(
     private val _mensagem = MutableStateFlow<String?>(null)
     val mensagem: StateFlow<String?> = _mensagem.asStateFlow()
 
-    /** Nome da vaga, para o cabeçalho da tela. Vem do cadastro e é observado. */
     private val tituloVaga: Flow<String> = vagaRepository?.observarTodas()
         ?.map { lista -> lista.firstOrNull { it.id == vagaId }?.titulo.orEmpty() }
         ?: flowOf("")
 
-    /** Roteiro que vale para esta tela, e se a vaga já tem um próprio. */
     private data class Fonte(val roteiro: Roteiro?, val proprioDaVaga: Boolean)
 
     private val fonte: Flow<Fonte> = if (vagaId == null) {
@@ -103,10 +86,6 @@ class RoteiroViewModel(
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), EstadoRoteiro())
 
-    /**
-     * Título sugerido ao criar o roteiro da vaga: parte do título do padrão e
-     * ganha o nome da vaga, para não ficar igual ao roteiro de todo mundo.
-     */
     private fun tituloSugerido(roteiro: Roteiro?, nomeVaga: String): String {
         val base = roteiro?.titulo.orEmpty()
         if (vagaId == null || nomeVaga.isBlank()) return base
@@ -197,13 +176,6 @@ class RoteiroViewModel(
         }
     }
 
-    /**
-     * Recria as perguntas originais do processo.
-     *
-     * No roteiro padrão, volta as perguntas do processo seletivo. Numa vaga,
-     * apaga o roteiro próprio e ela volta a seguir o padrão — as outras vagas
-     * não são tocadas.
-     */
     fun restaurarPadrao() {
         viewModelScope.launch {
             if (vagaId != null) {

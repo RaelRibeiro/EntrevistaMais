@@ -47,7 +47,6 @@ import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
 
-/** Telas 1 e 2: entrar na conta e criar conta nova. */
 @Composable
 fun LoginScreen(
     viewModel: AuthViewModel,
@@ -158,8 +157,7 @@ fun CriarContaScreen(
         modifier = modifier,
         snackbarHost = { SnackbarHost(snackbarHost) },
     ) { padding ->
-        // Teclado vira espaço rolável no fim, em vez de encolher a janela: com
-        // `imePadding()` aqui a tela redimensionava a cada tecla e tremia.
+
         val espacoDoTeclado =
             with(LocalDensity.current) { WindowInsets.ime.getBottom(this).toDp() }
         Column(
@@ -289,10 +287,6 @@ private fun BotaoEntrar(
     }
 }
 
-/**
- * Entra com o Google (mesmo método do site). Fica oculto enquanto o web client
- * ID não estiver configurado no [FirebaseConfig] — e-mail/senha já funciona.
- */
 @Composable
 private fun BotaoGoogle(
     carregando: Boolean,

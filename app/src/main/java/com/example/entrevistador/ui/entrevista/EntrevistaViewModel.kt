@@ -30,13 +30,11 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-/** Qual das abas está aberta durante a entrevista. */
 enum class AbaEntrevista(val rotulo: String) {
     CURRICULO("Currículo"),
     ROTEIRO("Roteiro"),
 }
 
-/** Uma linha da tabela de locais, já combinada com a entrevista. */
 data class LinhaExperiencia(
     val id: Long = 0L,
     val local: String = "",
@@ -64,13 +62,11 @@ data class EstadoEntrevista(
 ) {
     val duracaoPrevistaMinutos: Int get() = entrevista?.duracaoMinutos ?: 0
 
-    /** Perguntas que não são tabela nem seção: as que viram campo na tela. */
     val perguntasDoFormulario: List<Pergunta>
         get() = roteiro?.perguntas.orEmpty().filter {
             it.tipo != TipoResposta.SECAO && it.tipo != TipoResposta.TABELA_EXPERIENCIAS
         }
 
-    /** "Dia e horário" da própria entrevista, usado no autopreenchimento. */
     val diaEHora: String
         get() {
             val entrevista = entrevista ?: return ""
@@ -104,8 +100,6 @@ class EntrevistaViewModel(
                 return@launch
             }
 
-            // A entrevista segue o roteiro próprio da vaga quando existe; caso
-            // contrário, o roteiro padrão do processo.
             val roteiro = roteiroRepository.obterParaEntrevista(entrevista.vagaId)
             val respostas = formularioRepository.observarRespostas(entrevistaId)
             val experiencias = formularioRepository.observarExperiencias(entrevistaId)
@@ -137,8 +131,6 @@ class EntrevistaViewModel(
                 )
             }
 
-            // As respostas e a tabela são observadas: o recrutador pode voltar
-            // para a tela e continuar de onde parou, inclusive após fechar o app.
             viewModelScope.launch {
                 respostas.collect { mapa -> _estado.update { it.copy(respostasPorPergunta = mapa) } }
             }
@@ -174,7 +166,6 @@ class EntrevistaViewModel(
 
     fun trocarAba(aba: AbaEntrevista) = _estado.update { it.copy(aba = aba) }
 
-    /** Botão INICIAR: grava o horário real e liga o cronômetro. */
     fun iniciar() {
         val entrevista = _estado.value.entrevista ?: return
         if (_estado.value.emAndamento) return
@@ -220,25 +211,18 @@ class EntrevistaViewModel(
 
     fun aoAlterarRespostas(valor: String) = _estado.update { it.copy(respostas = valor) }
 
-    /** Aprova o candidato para a próxima fase, direto da tela da entrevista. */
     fun aprovar() = decidir("Candidato aprovado para a próxima fase.") {
         entrevistaRepository.aprovar(it)
     }
 
-    /** Reprova o candidato na fase atual. */
     fun reprovar() = decidir("Candidato reprovado.") {
         entrevistaRepository.reprovar(it)
     }
 
-    /** Encerra o candidato: some da lista do dia, mas o registro é preservado. */
     fun encerrar() = decidir("Candidato encerrado.") {
         entrevistaRepository.encerrar(it)
     }
 
-    /**
-     * Reabre um candidato encerrado ou já avaliado: volta a ficar agendado e
-     * editável, para refazer a entrevista sem recriar o candidato.
-     */
     fun reabrir() {
         val entrevista = _estado.value.entrevista ?: return
         viewModelScope.launch {
@@ -303,7 +287,6 @@ class EntrevistaViewModel(
         }
     }
 
-    /** Anexa um PDF ou imagem ao currículo da entrevista. */
     fun anexarCurriculo(uri: Uri) {
         val entrevista = _estado.value.entrevista ?: return
         viewModelScope.launch {
@@ -313,8 +296,7 @@ class EntrevistaViewModel(
             }
             when (val resultado = anexoRepository.copiar(uri)) {
                 is AnexoRepository.Resultado.Sucesso -> {
-                    // O endereço do currículo no Firestore é o que fica gravado
-                    // na entrevista; assim ele abre em qualquer aparelho (e no site).
+
                     val caminho = runCatching {
                         anexoRepository.enviarParaNuvem(resultado.caminho, resultado.nomeOriginal)
                     }.getOrDefault(resultado.caminho)
@@ -340,12 +322,6 @@ class EntrevistaViewModel(
 
     fun consumirMensagem() = _estado.update { it.copy(mensagem = null) }
 
-    // --- roteiro estruturado ---
-
-    /**
-     * Valor exibido no campo: o que o recrutador digitou ou, se ainda estiver
-     * vazio, o preenchimento automático do app.
-     */
     fun valorExibido(pergunta: Pergunta): String {
         val digitado = _estado.value.respostasPorPergunta[pergunta.id].orEmpty()
         if (digitado.isNotBlank()) return digitado
@@ -372,7 +348,6 @@ class EntrevistaViewModel(
         }
     }
 
-    /** O que o app escreve sozinho, sem o recrutador precisar digitar. */
     fun respostaAutomatica(pergunta: Pergunta): String {
         val atual = _estado.value
         return when (pergunta.respostaAutomatica) {
@@ -398,8 +373,6 @@ class EntrevistaViewModel(
         vaga.resumoAtividades.takeIf { it.isNotBlank() }?.let { "Atividades principais: $it" },
     ).joinToString("\n")
 
-    // --- tabela de locais ---
-
     fun aoAlterarExperiencia(indice: Int, linha: LinhaExperiencia) {
         _estado.update { atual ->
             val copia = atual.experiencias.toMutableList()
@@ -422,7 +395,7 @@ class EntrevistaViewModel(
             val copia = atual.experiencias.toMutableList()
             if (indice !in copia.indices) return@update atual
             copia.removeAt(indice)
-            // Sempre sobra uma linha em branco: a tabela nunca fica sem linha.
+
             if (copia.isEmpty()) copia.add(LinhaExperiencia())
             atual.copy(experiencias = copia)
         }
@@ -436,7 +409,6 @@ class EntrevistaViewModel(
         }
     }
 
-    /** Salva a linha; o id vem da própria linha, então editar e criar usam o mesmo caminho. */
     private fun persistirExperiencia(indice: Int) {
         val entrevista = _estado.value.entrevista ?: return
         val linha = _estado.value.experiencias.getOrNull(indice) ?: return
@@ -453,7 +425,7 @@ class EntrevistaViewModel(
                     motivoSaida = linha.motivoSaida,
                 )
             )
-            // Guarda o id devolvido para que a próxima edição atualize a linha certa.
+
             if (linha.id == 0L && id != 0L) {
                 _estado.update { atual ->
                     val copia = atual.experiencias.toMutableList()

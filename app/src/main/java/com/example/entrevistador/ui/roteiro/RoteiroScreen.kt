@@ -53,13 +53,6 @@ import com.example.entrevistador.domain.model.TipoResposta
 import com.example.entrevistador.ui.components.CampoTexto
 import com.example.entrevistador.ui.components.CartaoSecao
 
-/**
- * Edição do roteiro usado na aba "Roteiro" durante a entrevista.
- *
- * O roteiro é uma lista de perguntas ordenadas. As perguntas marcadas como
- * automáticas já vêm preenchidas na tela da entrevista — o app sabe o dia/hora,
- * o nome do candidato e os dados da vaga.
- */
 @Composable
 fun RoteiroScreen(
     viewModel: RoteiroViewModel,
@@ -91,8 +84,6 @@ fun RoteiroScreen(
             return@Scaffold
         }
 
-        // Teclado entra como espaço rolável no fim da lista, e não como encolhimento
-        // da janela: encolher fazia a tela tremer a cada tecla digitada.
         val espacoDoTeclado =
             with(LocalDensity.current) { WindowInsets.ime.getBottom(this).toDp() }
         Column(

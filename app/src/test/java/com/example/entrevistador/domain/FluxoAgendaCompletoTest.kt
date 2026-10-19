@@ -5,12 +5,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Mesma base de casos do AgendaSchedulerTest, mas passando pela lógica completa
- * que vai a DefinitionsRepository -> EntrevistaRepository -> AgendaScheduler.
- * É o caminho que o app realmente executa quando o recrutador salva as
- * Definições padrão.
- */
 class FluxoAgendaCompletoTest {
 
     private fun definicoes(
@@ -29,7 +23,6 @@ class FluxoAgendaCompletoTest {
         intervaloMinutos = intervalo,
     )
 
-    /** Horários do dia após cada candidato novo entrar na agenda. */
     private fun montar(quantos: Int, d: DefinicoesPadrao): List<List<Int>> =
         (0 until quantos).map { i ->
             AgendaScheduler.calcularHorarios(
@@ -54,7 +47,7 @@ class FluxoAgendaCompletoTest {
         val todos = montar(8, d).last()
 
         assertTrue(todos.none { it in (12 * 60 until 13 * 60) })
-        // E nenhuma entrevista atravessa o começo do almoço.
+
         assertTrue(todos.none { it < 13 * 60 && it + 45 > 12 * 60 })
     }
 

@@ -23,14 +23,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 
-/**
- * Roteiro = uma lista ordenada de perguntas.
- *
- * Guardar como texto livre não funciona para o recrutador: ele precisa pular de
- * pergunta em pergunta durante a chamada e volver para o que já respondeu. Por
- * isso o roteiro é uma lista de [Pergunta] e cada resposta é salva por
- * (entrevista, pergunta) — dá para retomar depois.
- */
 class RoteiroRepository(
     private val dao: RoteiroDao,
     private val perguntaDao: PerguntaDao,
@@ -81,9 +73,6 @@ class RoteiroRepository(
         dao.excluirPorId(id)
     }
 
-    // --- roteiro próprio de uma vaga ---
-
-    /** Roteiro da vaga com as perguntas, ou null se ela ainda usa o padrão. */
     suspend fun obterParaVaga(vagaId: Long): Roteiro? {
         val roteiro = dao.buscarDaVaga(vagaId) ?: return null
         return roteiro.paraDominio().copy(
@@ -100,22 +89,9 @@ class RoteiroRepository(
         )
     }
 
-    /**
-     * Roteiro que a vaga deve usar na entrevista: o próprio se existir, o
-     * padrão do processo caso contrário.
-     *
-     * Não cria cópia nenhuma — a vaga que nunca foi editada continua
-     * acompanhando o roteiro padrão, inclusive nas atualizações dele.
-     */
     suspend fun obterParaEntrevista(vagaId: Long?): Roteiro? =
         vagaId?.let { obterParaVaga(it) } ?: obterPadrao()
 
-    /**
-     * Cria o roteiro da vaga copiando as perguntas do padrão.
-     *
-     * É o "pegar como padrão e editar só nesta vaga": a cópia é independente,
-     * então mexer aqui não altera o roteiro das outras vagas.
-     */
     suspend fun copiarDoPadraoParaVaga(vagaId: Long, titulo: String? = null): Long {
         dao.buscarDaVaga(vagaId)?.let { existente ->
             return existente.id
@@ -137,7 +113,6 @@ class RoteiroRepository(
         return id
     }
 
-    /** Grava as perguntas do roteiro da vaga, criando-o se ainda não existir. */
     suspend fun salvarParaVaga(
         vagaId: Long,
         titulo: String,
@@ -154,25 +129,12 @@ class RoteiroRepository(
         return id
     }
 
-    /**
-     * Apaga o roteiro próprio da vaga, que volta a seguir o padrão do processo.
-     *
-     * As perguntas específicas da vaga saem do banco. As respostas já dadas
-     * continuam gravadas, ligadas ao id da pergunta antiga, e por isso deixam
-     * de aparecer: é o mesmo efeito de apagar um roteiro qualquer, e por isso
-     * a confirmação na tela avisa antes.
-     */
     suspend fun voltarAoRoteiroPadrao(vagaId: Long) {
         val roteiro = dao.buscarDaVaga(vagaId) ?: return
         perguntaDao.excluirDoRoteiro(roteiro.id)
         dao.excluirPorId(roteiro.id)
     }
 
-    /**
-     * Insere o roteiro padrão na primeira execução, já com as perguntas do
-     * processo seletivo. Se a base já tem roteiro (usuário do app de antes),
-     * preenche as perguntas que faltam sem apagar o que foi customizado.
-     */
     suspend fun garantirPadrao() {
         if (dao.contar() == 0) {
             val id = dao.inserir(
@@ -195,13 +157,6 @@ class RoteiroRepository(
     companion object {
         val CONTEUDO_PADRAO = "Roteiro de entrevista padrão"
 
-        /**
-         * Perguntas do roteiro padrão, na ordem em que devem ser feitas.
-         *
-         * As de [RespostaAutomatica] já aparecem preenchidas na tela: o app
-         * sabe o dia/hora, o nome e os dados da vaga, então o recrutador não
-         * digita de novo o que já está no sistema.
-         */
         fun perguntasPadrao(roteiroId: Long): List<Pergunta> = listOf(
             secao("Identificação", roteiroId, 0),
             pergunta(
@@ -320,7 +275,6 @@ class RoteiroRepository(
     }
 }
 
-/** Respostas e locais preenchidos durante uma entrevista específica. */
 class EntrevistaFormularioRepository(
     private val respostaDao: RespostaDao,
     private val experienciaDao: ExperienciaDao,
@@ -347,7 +301,6 @@ class EntrevistaFormularioRepository(
         respostaDao.salvar(RespostaEntity(entrevistaId, perguntaId, ""))
     }
 
-    /** Salva a linha inteira da tabela de locais (insere ou atualiza) e devolve o id. */
     suspend fun salvarExperiencia(experiencia: Experiencia): Long {
         return if (experiencia.id == 0L) {
             experienciaDao.inserir(experiencia.paraEntidade().copy(entrevistaId = experiencia.entrevistaId))
@@ -363,19 +316,12 @@ class EntrevistaFormularioRepository(
         }
     }
 
-    /**
-     * Apaga tudo que pertence a uma entrevista: as respostas do roteiro e a
-     * tabela de locais. Precisa ser chamado junto da remoção do candidato — sem
-     * isso essas linhas ficavam órfãs no banco, apontando para um candidato que
-     * não existe mais.
-     */
     suspend fun apagarDadosDaEntrevista(entrevistaId: Long) {
         respostaDao.excluirDaEntrevista(entrevistaId)
         experienciaDao.excluirDaEntrevista(entrevistaId)
     }
 }
 
-/** Cadastro das vagas abertas pela empresa. */
 class VagaRepository(
     private val dao: VagaDao,
     private val entrevistaRepository: EntrevistaRepository? = null,
@@ -385,13 +331,8 @@ class VagaRepository(
 
     suspend fun buscarPorId(id: Long): Vaga? = dao.buscarPorId(id)?.paraDominio()
 
-    /** Candidatos já inscritos na vaga, para comparar com o limite cadastrado. */
     suspend fun contarCandidatos(vagaId: Long): Int = entrevistaRepository?.contarCandidatosDaVaga(vagaId) ?: 0
 
-    /**
-     * Contagem por vaga em forma de Flow, para o aviso de limite acompanhar
-     * entrada e saída de candidatos sem precisar recarregar a tela.
-     */
     fun observarContagemPorVaga(): Flow<Map<Long, Int>> =
         entrevistaRepository?.observarContagemPorVaga() ?: flowOf(emptyMap())
 

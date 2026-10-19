@@ -8,13 +8,6 @@ import com.example.entrevistador.data.local.entity.EntrevistaEntity
 import kotlinx.coroutines.flow.Flow
 import java.time.LocalDate
 
-/**
- * Contagem de candidatos por vaga, observável.
- *
- * A contagem precisa mudar quando um candidato entra ou sai da vaga, e não só
- * quando a vaga é editada. Por isso vem direto do banco como Flow, agrupada no
- * SQL, em vez de ser consultada uma vez por vaga na interface.
- */
 data class ContagemPorVaga(
     val vagaId: Long,
     val quantidade: Int,
@@ -38,11 +31,9 @@ interface EntrevistaDao {
     @Query("SELECT COUNT(*) FROM entrevistas WHERE data = :data")
     suspend fun contarPorData(data: LocalDate): Int
 
-    /** Quantos candidatos já estão na vaga, em qualquer dia — para o limite por vaga. */
     @Query("SELECT COUNT(*) FROM entrevistas WHERE vagaId = :vagaId")
     suspend fun contarPorVaga(vagaId: Long): Int
 
-    /** Mesma contagem, mas reemitindo sempre que a tabela de entrevistas muda. */
     @Query(
         """
         SELECT vagaId AS vagaId, COUNT(*) AS quantidade

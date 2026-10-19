@@ -43,9 +43,7 @@ abstract class EntrevistaMaisDatabase : RoomDatabase() {
     abstract fun vagaDao(): VagaDao
 
     companion object {
-        // O nome do arquivo segue "entrevistador" de propósito: trocar isso
-        // faria o Room tratar como um banco novo e apagaria os roteiros e
-        // rascunhos que já estão no aparelho de quem atualiza o app.
+
         private const val NOME = "entrevistador.db"
 
         @Volatile
@@ -61,11 +59,6 @@ abstract class EntrevistaMaisDatabase : RoomDatabase() {
                 .addMigrations(MIGRACAO_1_2, MIGRACAO_2_3, MIGRACAO_3_4)
                 .build()
 
-        /**
-         * v1 -> v2: currículo virou arquivo/resumo e o roteiro virou formulário.
-         * As entrevistas já cadastradas continuam válidas — só ganham campos
-         * novos com valor padrão.
-         */
         val MIGRACAO_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
@@ -142,18 +135,10 @@ abstract class EntrevistaMaisDatabase : RoomDatabase() {
             }
         }
 
-        /**
-         * v2 -> v3: a vaga ganhou empresa, contrato, limite de candidatos e o
-         * horário deixou de ser texto livre para virar dois relógios.
-         *
-         * O `horarioTrabalho` antigo ("08:00 às 17:00") é convertido para
-         * entrada/saída quando segue esse formato; vagas fora do padrão
-         * continuam com os dois campos vazios e o recrutador escolhe de novo.
-         */
+
         val MIGRACAO_2_3 = object : Migration(2, 3) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                // O horário deixou de ser texto livre e virou dois campos, então a
-                // tabela é recriada: o SQLite não tem DROP COLUMN confiável aqui.
+
                 db.execSQL(
                     """
                     CREATE TABLE vagas_novo (
@@ -174,8 +159,8 @@ abstract class EntrevistaMaisDatabase : RoomDatabase() {
                     """.trimIndent()
                 )
 
-                // "08:00 às 17:00" -> entrada 480, saída 1020. Vagas fora desse
-                // formato ficam sem horário e o recrutador escolhe de novo.
+
+
                 db.query("SELECT id, titulo, horarioTrabalho, salarioBeneficios, tempoExperiencia, escolaridade, exigeHabilitacao, resumoAtividades, ativa FROM vagas")
                     .use { cursor ->
                         while (cursor.moveToNext()) {
@@ -224,14 +209,6 @@ abstract class EntrevistaMaisDatabase : RoomDatabase() {
                 (achado.groupValues[1].toInt() * 60) + achado.groupValues[2].toInt()
         }
 
-        /**
-         * v3 -> v4: horário manual por candidato e roteiro próprio por vaga.
-         *
-         * As duas mudanças são colunas novas, então basta o ALTER TABLE: o
-         * `inicioManual` começa em falso (ou seja, segue o cálculo automático,
-         * como sempre foi) e o `vagaId` do roteiro começa nulo (ou seja, o
-         * roteiro padrão continua valendo para todas as entrevistas).
-         */
         val MIGRACAO_3_4 = object : Migration(3, 4) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(

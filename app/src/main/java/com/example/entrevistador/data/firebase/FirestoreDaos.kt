@@ -25,11 +25,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.tasks.await
 import java.time.LocalDate
 
-/**
- * Converte a escrita do Room (substituição do documento) em escrita Firestore:
- * valores nulos viram `FieldValue.delete()` para que o documento volte ao estado
- * limpo, em vez de manter um valor antigo indevidamente.
- */
 private fun Map<String, Any>.comNulosComoDelete(): Map<String, Any> =
     mapValues { (_, valor) -> valor ?: com.google.firebase.firestore.FieldValue.delete() }
 
@@ -145,7 +140,6 @@ internal class FirestoreRoteiroDao(private val fontes: FirestoreFontes) : Roteir
     private fun ordenar(lista: List<RoteiroEntity>): List<RoteiroEntity> =
         lista.sortedWith(compareBy({ it.ordem }, { it.id }))
 
-    /** Roteiros do processo (sem vaga). */
     private suspend fun somenteDoProcesso() = colecao.get().await()
         .documents.mapNotNull { it.paraRoteiroDoc() }
         .filter { it.vagaId == null }

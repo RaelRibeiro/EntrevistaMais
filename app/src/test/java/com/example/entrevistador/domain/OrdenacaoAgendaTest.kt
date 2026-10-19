@@ -9,10 +9,6 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZonedDateTime
 
-/**
- * A ordem da agenda é o que o recrutador enxerga primeiro: o que está rolando
- * agora, depois o mais próximo, e o histórico só no fim.
- */
 class OrdenacaoAgendaTest {
 
     private val hoje = LocalDate.of(2026, 3, 10)

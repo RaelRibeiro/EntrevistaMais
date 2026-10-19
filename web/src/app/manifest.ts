@@ -1,10 +1,5 @@
 import type { MetadataRoute } from 'next';
 
-/**
- * Manifest PWA. No celular com Chrome, o site vira instalável e o sistema
- * oferece "Adicionar à tela inicial" — o caminho que o recrutador usa para
- * chegar ao app do dia a dia sem depender do navegador.
- */
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: 'EntrevistaMais',

@@ -66,13 +66,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-/**
- * Cadastro das vagas.
- *
- * É aqui que o recrutador escreve uma vez as informações da vaga (horário,
- * salário, escolaridade, atividades) e o roteiro passa a mostrá-las sozinho
- * no início de cada entrevista — sem o recrutador repitar para o candidato.
- */
 class VagaViewModel(private val repository: VagaRepository) : ViewModel() {
 
     private val _formulario = MutableStateFlow<Vaga?>(null)
@@ -84,13 +77,6 @@ class VagaViewModel(private val repository: VagaRepository) : ViewModel() {
     val vagas: StateFlow<List<Vaga>> = repository.observarTodas()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    /**
-     * Quantos candidatos já estão em cada vaga — alimenta o aviso de limite.
-     *
-     * Vem direto do banco como Flow para acompanhar também a entrada e a saída
-     * de candidatos. Antes, a contagem só era refeita quando a lista de vagas
-     * mudava, e o aviso ficava desatualizado depois de adicionar alguém.
-     */
     val contagemPorVaga: StateFlow<Map<Long, Int>> = repository.observarContagemPorVaga()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
@@ -233,7 +219,6 @@ private fun CartaoVaga(
 ) {
     var confirmar by remember { mutableStateOf(false) }
 
-    // O limite não bloqueia: o recrutador pode querer passar dele, o app avisa.
     val limite = vaga.limiteCandidatos.takeIf { it > 0 }
     val estourou = limite != null && candidatos > limite
 
@@ -423,7 +408,6 @@ private fun DialogoVaga(
     )
 }
 
-/** Lista suspensa para escolhas fechadas (contrato, escolaridade, sim/não). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SeletorOpcao(
@@ -457,7 +441,6 @@ private fun SeletorOpcao(
     }
 }
 
-/** Botão que abre um relógio de verdade para a entrada/saída da vaga. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SeletorHora(

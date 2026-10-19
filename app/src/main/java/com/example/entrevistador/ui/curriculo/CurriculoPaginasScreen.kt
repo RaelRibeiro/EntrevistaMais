@@ -49,19 +49,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-/**
- * Zoom máximo. Acima disso a imagem perde nitidez e o recrutador só se perde.
- * O zoom é feito com dois dedos; para voltar ao tamanho normal, dá para
- * pinçar fechando os dedos de novo.
- */
 private const val ZOOM_MAXIMO = 6f
 
-/**
- * Visualizador de currículo em PDF, uma imagem por página.
- *
- * O recrutador precisa do currículo em tela cheia, com zoom, para ler o
- * currículo inteiro enquanto fala com o candidato.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CurriculoPaginasScreen(
@@ -111,14 +100,6 @@ fun CurriculoPaginasScreen(
     }
 }
 
-/**
- * Todas as páginas lado a lado, com rolagem e zoom por pinch.
- *
- * A rolagem entre páginas só é liberada quando a página atual está no tamanho
- * normal. Com a página ampliada o arrasto precisa mover o currículo, e não
- * trocar de página — senão dar zoom em um currículo de três páginas impediria
- * justamente de chegar à segunda.
- */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun PaginasZoom(caminhos: List<String>) {
@@ -137,7 +118,6 @@ private fun PaginasZoom(caminhos: List<String>) {
             )
         }
 
-        // O contador fica sobre a página: o currículo é o que importa aqui.
         if (caminhos.size > 1) {
             Text(
                 text = "Página ${pager.currentPage + 1} de ${caminhos.size}",
@@ -153,13 +133,6 @@ private fun PaginasZoom(caminhos: List<String>) {
     }
 }
 
-/**
- * Uma página, que abre ocupando a tela e dá zoom por pinch.
- *
- * O zoom é só por pinça (dois dedos, abrindo e fechando), como se faz em
- * qualquer leitor de PDF. No tamanho normal a página aparece inteira; ao
- * ampliar, ela passa a ser arrastada até onde o recrutador precisar ler.
- */
 @Composable
 private fun PaginaComZoom(caminho: String, aoAmpliar: (Boolean) -> Unit) {
     val bitmap = remember(caminho) { BitmapFactory.decodeFile(caminho) }
@@ -176,17 +149,12 @@ private fun PaginaComZoom(caminho: String, aoAmpliar: (Boolean) -> Unit) {
         modifier = Modifier
             .fillMaxSize()
             .then(
-                // No tamanho normal este bloco não existe: com ele, o
-                // detectTransformGestures engole o arrasto do dedo e a troca de
-                // página deixa de funcionar. Só com a página ampliada ele entra,
-                // e aí quem recebe o arrasto é a própria página.
+
                 if (zoom > 1f) {
                     Modifier.pointerInput(caminho) {
                         detectTransformGestures { _, pan, _, escala ->
                             zoom = (zoom * escala).coerceIn(1f, ZOOM_MAXIMO)
-                            // O pan é o movimento do centro da pinça: num gesto
-                            // de dois dedos ele já é o arrasto da página, e num
-                            // gesto de um dedo é o arrasto que o recrutador quer.
+
                             deslocamento += pan
                         }
                     }
@@ -196,9 +164,7 @@ private fun PaginaComZoom(caminho: String, aoAmpliar: (Boolean) -> Unit) {
             ),
         contentAlignment = Alignment.Center,
     ) {
-        // Com a imagem ajustada à tela, quanto maior o zoom mais ela cresce
-        // para fora dos limites; o deslocamento é limitado a essa sobra para
-        // o currículo não poder ser arrastado para fora da vista.
+
         val larguraVisivel = constraints.maxWidth.toFloat()
         val alturaVisivel = constraints.maxHeight.toFloat()
         val escalaConteudo = minOf(
@@ -225,8 +191,6 @@ private fun PaginaComZoom(caminho: String, aoAmpliar: (Boolean) -> Unit) {
         )
     }
 
-    // Ao voltar ao tamanho normal o deslocamento antigo ficaria pendurado, e a
-    // próxima pinça recomeçaria de onde a última parou em vez do centro.
     LaunchedEffect(zoom) {
         if (zoom <= 1f) deslocamento = Offset.Zero
         aoAmpliar(zoom > 1f)
@@ -240,12 +204,6 @@ class CurriculoPaginasViewModel(
     private val _estado = MutableStateFlow(Estado())
     val estado: StateFlow<Estado> = _estado.asStateFlow()
 
-    /**
-     * Carrega o currículo anexado.
-     *
-     * Serve tanto para PDF quanto para imagem: o PDF vira uma imagem por
-     * página, e a imagem é usada como está. A tela é a mesma nos dois casos.
-     */
     fun carregar(caminho: String, titulo: String) {
         if (_estado.value.carregando && _estado.value.titulo == titulo) return
         _estado.update { it.copy(carregando = true, erro = null, titulo = titulo) }

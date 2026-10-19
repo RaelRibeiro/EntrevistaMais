@@ -13,12 +13,6 @@ import kotlinx.coroutines.flow.map
 
 private val Context.dataStoreSessao: DataStore<Preferences> by preferencesDataStore("sessao")
 
-/**
- * Guarda quem está logado para que o app já abra direto na agenda.
- *
- * Guarda só o uid, o nome e o e-mail — nunca a senha. A senha fica com o
- * [AuthRepository] responsável (hash local ou, no futuro, o Firebase).
- */
 class SessionStore(private val context: Context) {
 
     private object Chaves {

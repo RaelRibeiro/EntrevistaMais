@@ -11,37 +11,18 @@ enum class StatusEntrevista(val rotulo: String) {
     CANCELADA("Cancelada"),
     NAO_COMPARECEU("Não compareceu"),
 
-    /**
-     * Aprovado para a próxima fase. Sai de [CONCLUIDA] porque a decisão do
-     * recrutador só existe depois da entrevista concluída.
-     */
     APROVADO("Aprovado"),
     REPROVADO("Reprovado"),
 
-    /**
-     * Encerrado: o recrutador já validou e entrevistou este candidato e não
-     * quer mais ele ocupando a agenda do dia. O registro é preservado para
-     * consulta, só sai da lista do dia.
-     */
     ENCERRADA("Encerrada"),
     ;
 
-    /** Verdadeiro quando a entrevista já passou por decisão do recrutador. */
     val decidido: Boolean
         get() = this == APROVADO || this == REPROVADO
 
-    /** Verdadeiro quando o candidato já foi avaliado e pode ser encerrado. */
     val encerravel: Boolean
         get() = this == CONCLUIDA || decidido
 
-    /**
-     * Verdadeiro quando a entrevista já terminou de algum jeito.
-     *
-     * Serve para decidir o que a tela da entrevista oferece. Uma entrevista
-     * encerrada ou cancelada já passou pelo recrutador, então precisa mostrar o
-     * resumo e o botão de reabrir — e não o de iniciar, que só faz sentido
-     * para quem ainda não começou.
-     */
     val finalizada: Boolean
         get() = this != AGENDADA && this != EM_ANDAMENTO
 
@@ -51,13 +32,6 @@ enum class StatusEntrevista(val rotulo: String) {
     }
 }
 
-/**
- * Uma entrevista agendada.
- *
- * O horário é guardado como minutos desde a meia-noite ([inicioMinutos]) em vez
- * de um instante absoluto: assim a agenda continua válida se o fuso do aparelho
- * mudar e é trivialmente ordenável.
- */
 data class Entrevista(
     val id: Long = 0L,
     val data: LocalDate,
@@ -76,10 +50,7 @@ data class Entrevista(
     val caminhoCurriculo: String = "",
     val nomeArquivoCurriculo: String = "",
     val vagaId: Long? = null,
-    /**
-     * O horário foi escolhido a mão pelo recrutador, então o recálculo
-     * automático não pode sobrescrever [inicioMinutos].
-     */
+
     val inicioManual: Boolean = false,
 ) {
     val fimMinutos: Int get() = inicioMinutos + duracaoMinutos

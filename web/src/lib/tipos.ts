@@ -1,10 +1,3 @@
-/**
- * Tipos do domínio, espelhados do aplicativo Android.
- *
- * O app grava no Room e o site grava no Firestore. Para os dois enxergarem a
- * mesma informação, os nomes dos campos precisam ser idênticos: o que o app
- * salva em `inicioMinutos`, o site lê em `inicioMinutos`.
- */
 
 export const StatusEntrevista = {
   AGENDADA: 'AGENDADA',
@@ -19,15 +12,12 @@ export const StatusEntrevista = {
 
 export type StatusEntrevista = (typeof StatusEntrevista)[keyof typeof StatusEntrevista];
 
-/** Verdadeiro quando a entrevista já passou por decisão do recrutador. */
 export const ehDecidido = (status: StatusEntrevista) =>
   status === StatusEntrevista.APROVADO || status === StatusEntrevista.REPROVADO;
 
-/** Verdadeiro quando o candidato já foi avaliado e pode ser encerrado. */
 export const ehEncerravel = (status: StatusEntrevista) =>
   status === StatusEntrevista.CONCLUIDA || ehDecidido(status);
 
-/** Mesmos rótulos do enum do app, usados em toda a interface. */
 export const ROTULO_STATUS: Record<StatusEntrevista, string> = {
   AGENDADA: 'Agendada',
   EM_ANDAMENTO: 'Em andamento',
@@ -39,7 +29,6 @@ export const ROTULO_STATUS: Record<StatusEntrevista, string> = {
   ENCERRADA: 'Encerrada',
 };
 
-/** Status que já contam como resposta do recrutador. */
 export const DECIDIDOS: StatusEntrevista[] = [
   StatusEntrevista.CONCLUIDA,
   StatusEntrevista.APROVADO,
@@ -47,19 +36,12 @@ export const DECIDIDOS: StatusEntrevista[] = [
   StatusEntrevista.ENCERRADA,
 ];
 
-/**
- * Status a partir dos quais a agenda para de esperar resposta.
- *
- * Um candidato decidido não está mais na mesa: o horário dele volta a
- * ficar livre para o próximo da fila.
- */
 export const ENCERRAVEIS: StatusEntrevista[] = [
   StatusEntrevista.CONCLUIDA,
   StatusEntrevista.APROVADO,
   StatusEntrevista.REPROVADO,
 ];
 
-/** Depois de qualquer um destes, a entrevista vira registro imutável. */
 export const FINALIZADOS: StatusEntrevista[] = [
   StatusEntrevista.CONCLUIDA,
   StatusEntrevista.APROVADO,
@@ -67,13 +49,6 @@ export const FINALIZADOS: StatusEntrevista[] = [
   StatusEntrevista.ENCERRADA,
 ];
 
-/**
- * Verdadeiro quando a entrevista já terminou de algum jeito.
- *
- * Mesmo regra do app (`StatusEntrevista.finalizada`): cancelada e não compareceu
- * também são "terminadas" e por isso não aceitam mais iniciar — só reabrir.
- * Sem isto, o site tratava esses dois status como se ainda pudessem começar.
- */
 export const ehFinalizado = (status: StatusEntrevista) =>
   status !== StatusEntrevista.AGENDADA && status !== StatusEntrevista.EM_ANDAMENTO;
 
@@ -143,7 +118,7 @@ export interface Roteiro {
   conteudo: string;
   ordem: number;
   padrao: boolean;
-  /** Nulo no roteiro padrão do processo; preenchido no roteiro de uma vaga. */
+
   vagaId: number | null;
 }
 
@@ -162,10 +137,10 @@ export interface Entrevista {
   tipoCurriculo: TipoCurriculo;
   caminhoCurriculo: string;
   nomeArquivoCurriculo: string;
-  /** Preenchido ao iniciar (cronômetro) e ao concluir (duração real). */
+
   inicioReal: number | null;
   fimReal: number | null;
-  /** Campos que o app já gravava e o site precisa ler para não perder dado. */
+
   respostasRoteiro: string;
   notas: string;
   criadoEm: number;
@@ -177,7 +152,7 @@ export interface Vaga {
   empresa: string;
   tipoContrato: string;
   horarioTrabalho: string;
-  /** Minutos da meia-noite (gravação igual ao app); vazio até preencher. */
+
   entradaMinutos: number;
   saidaMinutos: number;
   salarioBeneficios: string;
@@ -189,7 +164,6 @@ export interface Vaga {
   criadoEm: number;
 }
 
-/** Exibe o horário de trabalho da vaga, dos campos do app ou do texto antigo. */
 export function horarioDaVaga(vaga: Pick<Vaga, 'horarioTrabalho' | 'entradaMinutos' | 'saidaMinutos'>): string {
   const preenchido = (m: number) => Number.isFinite(m) && m >= 0;
   if (preenchido(vaga.entradaMinutos) && preenchido(vaga.saidaMinutos)) {
@@ -211,7 +185,7 @@ export interface LinhaExperiencia {
 }
 
 export interface Definicoes {
-  /** Horário de início do expediente, em minutos desde a meia-noite. */
+
   horarioInicioMinutos: number;
   almocoInicioMinutos: number;
   almocoFimMinutos: number;

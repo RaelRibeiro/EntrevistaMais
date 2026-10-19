@@ -126,10 +126,8 @@ class DefinicoesViewModel(
         _estado.update { it.copy(salvando = false, mensagem = avisar) }
     }
 
-    /** Reaplica os horários dos dias que já têm entrevistas. */
     private suspend fun reaplicarAgenda(definicoes: DefinicoesPadrao) {
-        // Percorre de hoje até 60 dias à frente: cobre a agenda realisticamente
-        // usada e mantém a operação barata.
+
         for (offset in 0..60) {
             entrevistaRepository.reaplicarDefinicoes(java.time.LocalDate.now().plusDays(offset.toLong()))
         }

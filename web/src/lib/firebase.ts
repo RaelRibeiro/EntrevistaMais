@@ -2,17 +2,6 @@ import { initializeApp, getApps, type FirebaseApp } from 'firebase/app';
 import { getAuth, type Auth } from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
 
-/**
- * Configuração do Firebase.
- *
- * Os valores vêm do arquivo `.env.local`, preenchido com o projeto criado no
- * Firebase Console. Nada de chave fixa aqui: o repositório pode ser público
- * sem vazar segredo.
- *
- * As chaves de configuração de um app web NÃO são secretas — o segredo fica
- * nas regras de segurança do Firestore.
- */
-
 export const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY ?? '',
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ?? '',
@@ -21,7 +10,6 @@ export const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID ?? '',
 };
 
-/** Configuração mínima exigida para o site funcionar. */
 export function firebaseConfigurado(): boolean {
   return Boolean(
     firebaseConfig.apiKey &&
@@ -31,9 +19,6 @@ export function firebaseConfigurado(): boolean {
   );
 }
 
-// Inicialização Preguiçosa: sem o `.env.local` preenchido o site ainda sobe
-// (o login mostra o aviso), e o build/prerender do Next.js não quebra por
-// falta de chave. As funções abaixo só podem ser chamadas do navegador.
 let appRef: FirebaseApp | null = null;
 let authRef: Auth | null = null;
 let dbRef: Firestore | null = null;

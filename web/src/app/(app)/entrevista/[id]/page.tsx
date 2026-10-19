@@ -47,9 +47,7 @@ export default function PaginaEntrevista({ params }: Props) {
   useEffect(() => {
     if (!uid) return;
     setCarregando(true);
-    // O observer do Firestore só entrega valor no primeiro snapshot, então é
-    // ele quem desliga o "carregando". Sem isso a tela ficava em
-    // "Carregando entrevista…" para sempre.
+
     return observarEntrevista(uid, id, (dados) => {
       setEntrevista(dados);
       setCarregando(false);
@@ -66,7 +64,6 @@ export default function PaginaEntrevista({ params }: Props) {
     return observarRoteiros(uid, setRoteiros);
   }, [uid]);
 
-  // Roteiro da entrevista: o da vaga se existir, senão o padrão — igual ao app.
   useEffect(() => {
     if (!uid || roteiros.length === 0) return;
     const escolhido =
@@ -101,14 +98,9 @@ export default function PaginaEntrevista({ params }: Props) {
   const vaga = vagas.find((v) => Number(v.id) === entrevista.vagaId);
   const finalizada = ehFinalizado(entrevista.status);
   const emAndamento = entrevista.status === 'EM_ANDAMENTO';
-  // As respostas do roteiro viram registro depois que a entrevista terminou de
-  // qualquer jeito — mesmo regra do app (`AbaRoteiro.somenteLeitura`).
+
   const somenteLeitura = !emAndamento && entrevista.status !== 'AGENDADA';
 
-  /**
-   * Roda uma transição de status e devolve a mensagem do erro do Firestore
-   * para a tela, como o app faz pelos repositórios.
-   */
   const acao = async (acaoInterna: () => Promise<void>, sucesso: string) => {
     try {
       await acaoInterna();
@@ -121,9 +113,7 @@ export default function PaginaEntrevista({ params }: Props) {
   const iniciar = () =>
     acao(
       async () => {
-        // Não marca o horário como manual: no app iniciar a entrevista não
-        // libera o candidato do recálculo da agenda, e no site isso deixava a
-        // entrevista travada num horário errado e marcada como "alterado".
+
         await atualizarEntrevista(uid, id, {
           status: 'EM_ANDAMENTO',
           inicioReal: Date.now(),
@@ -138,8 +128,7 @@ export default function PaginaEntrevista({ params }: Props) {
         const agora = Date.now();
         await atualizarEntrevista(uid, id, {
           status: 'CONCLUIDA',
-          // O app garante os dois campos; sem o início não haveria como
-          // calcular a duração real depois.
+
           inicioReal: entrevista.inicioReal ?? agora,
           fimReal: agora,
         });
@@ -282,7 +271,6 @@ export default function PaginaEntrevista({ params }: Props) {
   );
 }
 
-/** "2026-10-01" -> "01/10/2026". */
 function dataParaTexto(data: string): string {
   const [ano, mes, dia] = data.split('-');
   if (!ano || !mes || !dia) return data;
@@ -359,13 +347,6 @@ function Abas({
   );
 }
 
-/**
- * Resumo de quem já passou por decisão ou foi encerrado.
- *
- * Mesmos botões e textos do cartão equivalente do app: decidir só faz sentido
- * depois de concluída, quem já decidiu pode trocar a decisão e encerrar, e o
- * encerramento é sempre reversível por "Reabrir candidato".
- */
 function ResumoFinalizado({
   entrevista,
   aoAprovar,
@@ -487,8 +468,6 @@ function BlocoCurriculo({
   const [texto, setTexto] = useState(e.curriculo);
   const [erroAnexo, setErroAnexo] = useState('');
 
-  // A entrevista chega pelo observador do Firestore; enquanto o campo está em
-  // edição ele não pode ser sobrescrito por outra atualização da tela.
   useEffect(() => {
     if (!editando) setTexto(e.curriculo);
   }, [e.curriculo, editando]);
@@ -498,8 +477,7 @@ function BlocoCurriculo({
     try {
       const url = await urlDoCurriculo(e.caminhoCurriculo);
       const novaAba = window.open(url, '_blank');
-      // A URL é montada na hora a partir dos pedaços guardados; se a aba
-      // abrir, o navegador não pode liberar a memória junto com a imagem.
+
       if (!novaAba) setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch {
       setErroAnexo('Não consegui buscar este currículo no banco de dados.');
@@ -710,7 +688,6 @@ function AbaRoteiro({
   );
 }
 
-/** Resumo da vaga no topo do roteiro, preenchido a partir do cadastro de vagas. */
 function BlocoVaga({ vaga }: { vaga: Vaga | undefined }) {
   if (!vaga) {
     return (
@@ -752,10 +729,6 @@ function ItemDaVaga({ rotulo, valor }: { rotulo: string; valor: string }) {
   );
 }
 
-/**
- * Um campo por pergunta. Pergunta com resposta automática mostra o valor que o
- * app preencheu e deixa sobrescrever.
- */
 function CampoPergunta({
   pergunta,
   valor,
@@ -826,16 +799,6 @@ function CampoPergunta({
   );
 }
 
-/**
- * Atributos que impedem o navegador de abrir o preenchimento automático sobre o
- * campo.
- *
- * `autoComplete="off"` sozinho não basta: o Chrome ignora esse valor em quase
- * todos os campos e ainda assim mostra a lista do Google por cima do texto. A
- * combinação abaixo resolve — `one-time-code` marca o campo como "não
- * preenchível", e `data-1p-ignore`/`data-lpignore` cobrem os gerenciadores de
- * senha que fazem o mesmo.
- */
 const SEM_AUTOFILL = {
   autoComplete: 'off' as const,
   'data-1p-ignore': true,
@@ -843,7 +806,6 @@ const SEM_AUTOFILL = {
   'data-form-type': 'other',
 };
 
-/** Campo de texto que respeita o formato pedido pelo tipo da pergunta. */
 function Campo({
   valor,
   aoAlterar,
@@ -892,10 +854,6 @@ function Campo({
   );
 }
 
-/**
- * Mini tabela "locais onde trabalhou": Local, Ano, Duração, Cargo e Motivo da
- * saída. Uma linha por emprego, com o botão de adicionar no fim.
- */
 function TabelaExperiencias({
   uid,
   entrevistaId,
@@ -974,12 +932,10 @@ function TabelaExperiencias({
                       value={linha[campo]}
                       readOnly={somenteLeitura}
                       {...SEM_AUTOFILL}
-                      // `name` único por linha: sem ele o navegador reaproveita o
-                      // mesmo campo em todas as linhas e o popup reaparece.
+
                       name={`exp_${linha.id}_${campo}`}
                       aria-label={rotulo}
-                      // `title` mostra o texto completo ao passar o mouse,
-                      // porque o input corta o que não cabe na coluna.
+
                       title={String(linha[campo] ?? '')}
                       onChange={(ev) => alterar(linha, campo, ev.target.value)}
                     />

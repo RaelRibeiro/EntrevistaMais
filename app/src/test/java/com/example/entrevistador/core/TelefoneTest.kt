@@ -3,10 +3,6 @@ package com.example.entrevistador.core
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/**
- * A máscara precisa se comportar bem quando o usuário apaga no meio do número —
- * é o caso mais comum de digitação e o que mais buga em apps de formulário.
- */
 class TelefoneTest {
 
     @Test
@@ -38,7 +34,7 @@ class TelefoneTest {
 
     @Test
     fun `apagar no meio refaz a mascara sem deixar residuo`() {
-        // Usuário segura o backspace em cima do DDD: sobra "(5) 99999-9999".
+
         val apagado = "(5) 99999-9999"
 
         assertEquals("5999999999", apagado.filter(Char::isDigit))
@@ -50,7 +46,6 @@ class TelefoneTest {
         val cheio = aplicarMascaraTelefone("35999999999")
         val semUltimo = cheio.dropLast(1)
 
-        // Sobram 10 dígitos, que é a forma de telefone fixo: 4+4.
         assertEquals("(35) 9999-9999", aplicarMascaraTelefone(semUltimo))
     }
 

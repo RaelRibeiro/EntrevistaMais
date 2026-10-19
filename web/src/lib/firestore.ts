@@ -30,30 +30,8 @@ import { TipoCurriculo as TipoCurriculoEnum, ehEncerravel } from './tipos';
 import { numero } from './horario';
 import { calcularHorarios, paraAgenda, MINUTOS_NO_DIA } from './agenda';
 
-/**
- * Acesso ao Firestore — mesmo esquema que o aplicativo Android usa.
- *
- * Toda informação vive em um subconjunto do usuário (UID) e os identificadores
- * são numéricos: o documento tem id = `"12345"` e guarda o campo `id` como
- * número. O app faz `getLong("id")` e ignora documentos sem esse campo, então
- * tudo o que for escrito aqui precisa ter o `id` numérico gravado.
- *
- *   usuarios/{uid}/definicoes/padrao
- *   usuarios/{uid}/vagas/{id}
- *   usuarios/{uid}/entrevistas/{id}
- *   usuarios/{uid}/roteiros/{id}
- *   usuarios/{uid}/perguntas/{id}       -> campo roteiroId
- *   usuarios/{uid}/respostas/{ent-Id-perguntaId}  -> campo entrevistaId
- *   usuarios/{uid}/experiencias/{id}    -> campo entrevistaId
- */
-
 const LONGO_EPOCA = 1704067200000;
 
-/**
- * Mesmo gerador do app, mas mantendo o valor dentro de 2^53 (seguro para o
- * número do JavaScript). O app usa `(millis shl 20)` que passa do limite — aqui
- * usamos o mesmo deslocamento que o app passará a usar após o ajuste.
- */
 function novoId(): number {
   return ((Date.now() - LONGO_EPOCA) * 4096 + Math.floor(Math.random() * 4096)) %
     Number.MAX_SAFE_INTEGER;
@@ -75,18 +53,13 @@ const documentos = (uid: string) => ({
   roteiro: (id: string) => doc(obterDb(), 'usuarios', uid, 'roteiros', id),
 });
 
-/** Id igual ao do app: `entrevistaId-perguntaId` (string dos números). */
 const idDeResposta = (entrevistaId: number, perguntaId: number): string =>
   `${entrevistaId}-${perguntaId}`;
 
-// O `id` é sempre o id do documento (string). Dados do app também trazem um
-// campo `id` numérico; ele NÃO pode sobrescrever o id que usamos para navegar.
 const lerDocumento = <T>(snap: DocumentSnapshot, padrao: Partial<T>): T => {
   const dados = snap.data();
   return { ...padrao, ...dados, id: snap.id } as T;
 };
-
-/* ---------------- Definições ---------------- */
 
 export const DEFINICOES_PADRAO: Definicoes = {
   horarioInicioMinutos: 9 * 60,
@@ -97,7 +70,6 @@ export const DEFINICOES_PADRAO: Definicoes = {
   intervaloMinutos: 0,
 };
 
-/** Perguntas padrão do processo — as mesmas 29 que o aplicativo cria no 1º login. */
 export const ROTEIRO_PADRAO_INICIAL = [
   { titulo: 'Identificação', tipo: 'SECAO', dica: '', respostaAutomatica: 'NENHUMA' },
   { titulo: 'Dia e Horário', tipo: 'TEXTO', dica: '', respostaAutomatica: 'DIA_E_HORA' },
@@ -130,11 +102,6 @@ export const ROTEIRO_PADRAO_INICIAL = [
   { titulo: 'Horário de trabalho, salário e benefícios, tempo de experiência, escolaridade, habilitação e atividades principais', tipo: 'TEXTO_LONGO', dica: '', respostaAutomatica: 'DADOS_DA_VAGA' },
 ] as const;
 
-/**
- * Cria (ou conserta) o roteiro padrão com as perguntas acima — igual ao app.
- * Se o roteiro padrão antigo (sem campo `id` numérico) existir, ele ganha um
- * id numérico e as perguntas passam a ser gravadas na coleção plana do app.
- */
 export async function garantirRoteiroPadrao(uid: string): Promise<void> {
   const docs = await getDocs(query(colecoes(uid).roteiros, where('padrao', '==', true)));
   const confiavel = docs.docs.find((d) => typeof d.data().id === 'number');
@@ -182,32 +149,10 @@ export async function garantirRoteiroPadrao(uid: string): Promise<void> {
   }
 }
 
-/* ---------------- Currículo (Firestore) ---------------- */
-
-/**
- * O currículo é gravado no Firestore, e não no Storage do Firebase: o Storage só
- * é liberado com faturamento ativo no projeto, o que exige cartão de crédito.
- * Como o uso é de poucos arquivos, guardamos no próprio Firestore, que já está
- * no nível gratuito.
- *
- * O Firestore aceita no máximo 1 MiB por documento, então o arquivo vira base64
- * (que infla o tamanho em 33%) e é dividido em pedaços gravados como documentos
- * irmãos em `partes/`. Na leitura os pedaços voltam, são concatenados e
- * decodificados de volta ao arquivo original.
- *
- * O custo: base64 ocupa um terço a mais de espaço, abrir o currículo lê mais de
- * um documento e a cota do Firestore se esgota mais rápido do que com um storage
- * de verdade. Em troca, nenhuma configuração de servidor e as regras de
- * segurança continuam isolando cada usuário na própria pasta.
- */
 const TAMANHO_MAXIMO = 5 * 1024 * 1024;
-/** 500 mil caracteres de base64 deixam folga larga dentro do limite de 1 MiB. */
+
 const TAMANHO_PARTE = 500_000;
-/**
- * Os pedaços são numerados com zeros à esquerda para que a ordem do Firestore
- * (que é alfabética) coincida com a ordem do arquivo. Assim os pedaços voltam
- * numa consulta só, em vez de uma leitura por pedaço.
- */
+
 const nomeDaParte = (indice: number): string => String(indice).padStart(6, '0');
 
 const caminhoCurriculoDe = (uid: string, arquivo: File): string => {
@@ -222,7 +167,6 @@ const tipoCurriculoDe = (arquivo: File): TipoCurriculo => {
   return nome.endsWith('.pdf') ? 'PDF' : 'IMAGEM';
 };
 
-/** Converte bytes em base64 em pedaços, para não estourar a pilha do navegador. */
 function paraBase64(bytes: Uint8Array): string {
   const pedacos = 0x8000;
   let binario = '';
@@ -244,14 +188,12 @@ function deBase64(texto: string): Uint8Array<ArrayBuffer> {
 const colecaoDeCurriculos = (uid: string, docId: string) =>
   doc(obterDb(), 'usuarios', uid, 'curriculos', docId);
 
-/** Separa o endereço `usuarios/{uid}/curriculos/{docId}.{ext}` nas suas partes. */
 function partesDoCaminho(caminho: string): { uid: string; docId: string } | null {
   const pedacos = caminho.split('/');
   if (pedacos.length < 4 || pedacos[0] !== 'usuarios') return null;
   return { uid: pedacos[1], docId: pedacos[3].replace(/\.[^.]+$/, '') };
 }
 
-/** Envia o arquivo para o Firestore e devolve o caminho e o tipo gravados. */
 export async function anexarCurriculo(
   uid: string,
   arquivo: File,
@@ -269,8 +211,6 @@ export async function anexarCurriculo(
   const total = texto.length;
   const quantidade = total === 0 ? 1 : Math.ceil(total / TAMANHO_PARTE);
 
-  // Um lote só: ou o currículo inteiro vai para o Firestore, ou nada dele fica
-  // pela metade (um currículo pela metade não serve para nada).
   const documento = colecaoDeCurriculos(uid, docId);
   const lote = writeBatch(obterDb());
   lote.set(documento, {
@@ -290,10 +230,6 @@ export async function anexarCurriculo(
   return { caminhoCurriculo: caminho, tipoCurriculo: tipoCurriculoDe(arquivo) };
 }
 
-/**
- * Monta o arquivo a partir dos pedaços guardados e devolve uma URL temporária
- * para abrir no navegador. Quem chamou é responsável por revogar a URL.
- */
 export async function urlDoCurriculo(caminho: string): Promise<string> {
   const partes = partesDoCaminho(caminho);
   if (!partes) throw new Error('Endereço de currículo inválido.');
@@ -312,7 +248,6 @@ export async function urlDoCurriculo(caminho: string): Promise<string> {
   return URL.createObjectURL(new Blob([deBase64(texto)], { type: tipo }));
 }
 
-/** Apaga o currículo (usado ao remover o candidato ou trocar o anexo). */
 export async function apagarCurriculoArquivo(caminho: string): Promise<void> {
   try {
     const partes = partesDoCaminho(caminho);
@@ -325,7 +260,7 @@ export async function apagarCurriculoArquivo(caminho: string): Promise<void> {
     lote.delete(referencia);
     await lote.commit();
   } catch {
-    // Se o documento não existir, o dado da entrevista continua valendo.
+
   }
 }
 
@@ -368,8 +303,6 @@ async function lerDefinicoes(uid: string): Promise<Definicoes> {
   return lerDefinicoesLidas(dados);
 }
 
-/* ---------------- Vagas ---------------- */
-
 function vagaDoDocumento(snap: DocumentSnapshot): Vaga {
   return lerDocumento<Vaga>(snap, {
     id: '',
@@ -390,7 +323,7 @@ function vagaDoDocumento(snap: DocumentSnapshot): Vaga {
 }
 
 export function observarVagas(uid: string, aoAtualizar: (vagas: Vaga[]) => void): () => void {
-  // orderBy('criadoEm') esconderia vagas criadas no app (sem esse campo).
+
   return onSnapshot(
     query(colecoes(uid).vagas, orderBy('titulo', 'asc')),
     (snap) => aoAtualizar(snap.docs.map(vagaDoDocumento)),
@@ -416,7 +349,6 @@ export async function removerVaga(uid: string, id: string): Promise<void> {
   await deleteDoc(documentos(uid).vaga(id));
 }
 
-/** Quantidade de entrevistas já vinculadas, por vaga (para o limite). */
 export async function contarCandidatos(uid: string): Promise<Record<string, number>> {
   const consulta = await getDocs(colecoes(uid).entrevistas);
   const mapa: Record<string, number> = {};
@@ -429,8 +361,6 @@ export async function contarCandidatos(uid: string): Promise<Record<string, numb
   });
   return mapa;
 }
-
-/* ---------------- Entrevistas ---------------- */
 
 function entrevistaDoDocumento(snap: DocumentSnapshot): Entrevista {
   return lerDocumento<Entrevista>(snap, {
@@ -472,7 +402,7 @@ export async function adicionarEntrevista(
     tipoCurriculo?: TipoCurriculo;
     caminhoCurriculo?: string;
     nomeArquivoCurriculo?: string;
-    /** Horário escolhido a dedo; nulo mantém o cálculo automático da agenda. */
+
     inicioMinutos?: number | null;
   },
 ): Promise<string> {
@@ -481,7 +411,6 @@ export async function adicionarEntrevista(
   const resumo = dados.curriculo?.trim() ?? '';
   const tipoCurriculo = dados.tipoCurriculo ?? TipoCurriculoEnum.RESUMO;
 
-  // Mesmas mensagens e mesma ordem do app (`EntrevistaRepository.adicionar`).
   if (!nome) throw new Error('Informe o nome do candidato.');
   if (telefone && telefone.replace(/\D/g, '').length < 10) {
     throw new Error('Telefone incompleto — inclua o DDD.');
@@ -505,8 +434,6 @@ export async function adicionarEntrevista(
     throw new Error(`O dia já tem ${definicoes.quantidadePorDia} entrevistas, que é o limite definido.`);
   }
 
-  // A duração é sempre a das Definições: muda o horário, não o tempo da
-  // entrevista. Validado aqui para não gravar uma entrevista impossível.
   if (dados.inicioMinutos !== undefined && dados.inicioMinutos !== null) {
     if (dados.inicioMinutos < 0 || dados.inicioMinutos >= MINUTOS_NO_DIA) {
       throw new Error('Horário inválido.');
@@ -550,12 +477,6 @@ export async function adicionarEntrevista(
   return String(id);
 }
 
-/**
- * Horário que o próximo candidato receberia se fosse salvo agora.
- *
- * Um candidato fictício no fim da fila revela a hora, e `null` avisa que o dia
- * está lotado. Igual ao app (`EntrevistaRepository.proximoHorarioMinutos`).
- */
 export async function proximoHorarioMinutos(
   uid: string,
   data: string,
@@ -574,10 +495,6 @@ export async function proximoHorarioMinutos(
   return calculados.find((c) => c.candidato.id === 'novo')?.inicioMinutos ?? null;
 }
 
-/**
- * Encerra de uma vez todos os candidatos do dia que já foram avaliados.
- * Igual ao app (`EntrevistaRepository.encerrarAvaliadosDoDia`).
- */
 export async function encerrarAvaliados(uid: string, data: string): Promise<number> {
   const consulta = await getDocs(colecoes(uid).entrevistas);
   const candidatos = consulta.docs
@@ -592,13 +509,11 @@ export async function encerrarAvaliados(uid: string, data: string): Promise<numb
   return candidatos.length;
 }
 
-/** Devolve o candidato para o horário calculado pelas Definições. */
 export async function voltarHorarioPadrao(uid: string, id: string): Promise<void> {
   await updateDoc(documentos(uid).entrevista(id), { inicioManual: false });
   await recalcularHorariosDoDia(uid, (await getDoc(documentos(uid).entrevista(id))).data()?.data as string);
 }
 
-/** Atualiza campos pontuais de uma entrevista (currículo, status, horários…). */
 export async function atualizarEntrevista(
   uid: string,
   id: string,
@@ -620,13 +535,6 @@ export async function atualizarEntrevista(
   await updateDoc(documentos(uid).entrevista(id), campos);
 }
 
-/**
- * Reabre a entrevista: volta para AGENDADA e apaga o registro de horário real.
- *
- * Igual ao app (`EntrevistaRepository.reabrir`). Os campos precisam ser apagados
- * de verdade, e não gravados como `null`: o app limpa com "apagar", e deixar o
- * `inicioReal` para trás faria a duração real antiga reaparecer no resumo.
- */
 export async function reabrirEntrevista(uid: string, id: string): Promise<void> {
   await updateDoc(documentos(uid).entrevista(id), {
     status: 'AGENDADA',
@@ -635,14 +543,6 @@ export async function reabrirEntrevista(uid: string, id: string): Promise<void> 
   });
 }
 
-/**
- * Grava o resumo escrito à mão do currículo.
- *
- * O app força `tipoCurriculo` para RESUMO ao salvar o texto
- * (`EntrevistaRepository.salvarCurriculo`): sem o arquivo, é resumo por
- * definição, e deixar o tipo PDF por cima faria o app tentar abrir um arquivo
- * que já não existe.
- */
 export async function salvarResumoCurriculo(
   uid: string,
   id: string,
@@ -651,11 +551,6 @@ export async function salvarResumoCurriculo(
   await atualizarEntrevista(uid, id, { curriculo, tipoCurriculo: 'RESUMO' });
 }
 
-/**
- * Recalcula os horários de um dia inteiro seguindo as Definições, respeitando
- * pausa do almoço e os candidatos cujo horário foi alterado à mão ou que já
- * estão em andamento. Igual ao botão "Recalcular" do aplicativo.
- */
 export async function recalcularHorariosDoDia(uid: string, data: string): Promise<void> {
   const definicoes = await lerDefinicoes(uid);
   const consulta = await getDocs(colecoes(uid).entrevistas);
@@ -773,8 +668,6 @@ export async function voltarAoHorarioCalculado(uid: string, id: string): Promise
   await updateDoc(documentos(uid).entrevista(id), { inicioManual: false });
 }
 
-/* ---------------- Roteiro e perguntas ---------------- */
-
 export function observarRoteiros(uid: string, aoAtualizar: (roteiros: Roteiro[]) => void): () => void {
   return onSnapshot(
     query(colecoes(uid).roteiros, orderBy('ordem', 'asc')),
@@ -811,7 +704,6 @@ export async function salvarRoteiro(
     vagaId: roteiro.vagaId ?? null,
   });
 
-  // Apaga as perguntas antigas deste roteiro e reescreve na ordem atual.
   const existentes = await getDocs(
     query(colecoes(uid).perguntas, where('roteiroId', '==', roteiroId)),
   );
@@ -846,7 +738,7 @@ export function observarRespostas(
   entrevistaId: string,
   aoAtualizar: (respostas: Record<string, string>) => void,
 ): () => void {
-  // Uma linha por campo no app: coleção plana com documentos `ent-perguntaId`.
+
   return onSnapshot(
     query(colecoes(uid).respostas, where('entrevistaId', '==', Number(entrevistaId))),
     (snap) => {
@@ -872,9 +764,7 @@ export async function salvarResposta(
 ): Promise<void> {
   const nEntrevista = Number(entrevistaId);
   const nPergunta = Number(perguntaId);
-  // Resposta em branco não é gravada, e a que existia é apagada: é o que o app
-  // faz (`EntrevistaFormularioRepository.salvarResposta`). Gravar `texto: ''`
-  // deixaria um documento que mente dizendo que a pergunta foi respondida.
+
   if (valor.trim() === '') {
     await deleteDoc(doc(colecoes(uid).respostas, idDeResposta(nEntrevista, nPergunta)));
     return;

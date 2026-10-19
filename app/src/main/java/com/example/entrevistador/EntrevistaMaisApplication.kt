@@ -21,8 +21,7 @@ class EntrevistaMaisApplication : Application() {
         super.onCreate()
         container = DefaultAppContainer(this)
         scope.launch {
-            // O roteiro padrão vive no Firestore do usuário; só tem sentido
-            // garantir quando alguém está logado.
+
             container.authRepository.usuarioAtual.filterNotNull().first()
             container.roteiroRepository.garantirPadrao()
         }
