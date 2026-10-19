@@ -2,6 +2,8 @@ package com.example.entrevistador.ui.agenda
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,6 +35,7 @@ import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RestartAlt
+import androidx.compose.material.icons.filled.Share
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.AlertDialog
@@ -69,6 +72,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -97,7 +101,15 @@ fun AgendaScreen(
     val mensagem by viewModel.mensagem.collectAsStateWithLifecycle()
     val horario by viewModel.horario.collectAsStateWithLifecycle()
     val snackbarHost = remember { SnackbarHostState() }
+    val context = LocalContext.current
     var mostrarSeletorDeData by remember { mutableStateOf(false) }
+    var busca by remember { mutableStateOf("") }
+    var filtroCategoria by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(estado.data) {
+        busca = ""
+        filtroCategoria = null
+    }
 
     LaunchedEffect(mensagem) {
         mensagem?.let {
@@ -134,13 +146,14 @@ fun AgendaScreen(
                 permitirEscolherData = { mostrarSeletorDeData = true },
             )
 
-            if (estado.quantidadeEncerravel > 0 || estado.encerradas.isNotEmpty()) {
+            if (!estado.carregando && estado.vagasUsadas > 0) {
                 LinhaAcoesDoDia(
                     quantidadeEncerravel = estado.quantidadeEncerravel,
                     quantidadeEncerradas = estado.encerradas.size,
                     mostrarEncerradas = estado.mostrarEncerradas,
                     aoEncerrarAvaliados = viewModel::encerrarAvaliadosDoDia,
                     aoAlternarEncerradas = viewModel::alternarEncerradas,
+                    aoExportarPdf = { viewModel.exportarPdfDaAgenda(context) },
                 )
             }
 
@@ -148,6 +161,30 @@ fun AgendaScreen(
                 estado.entrevistas + estado.encerradas
             } else {
                 estado.entrevistas
+            }
+
+            val categorias = (estado.entrevistas + estado.encerradas)
+                .map { it.categoria }
+                .filter { it.isNotBlank() }
+                .distinct()
+                .sorted()
+
+            val filtradas = listaVisivel.filter { entrevista ->
+                val combinaBusca = busca.isBlank() ||
+                    entrevista.nome.contains(busca.trim(), ignoreCase = true)
+                val combinaCategoria = filtroCategoria == null ||
+                    entrevista.categoria == filtroCategoria
+                combinaBusca && combinaCategoria
+            }
+
+            if (categorias.isNotEmpty() || busca.isNotBlank() || filtroCategoria != null) {
+                FiltrosAgenda(
+                    busca = busca,
+                    categorias = categorias,
+                    filtroCategoria = filtroCategoria,
+                    aoAlterarBusca = { busca = it },
+                    aoEscolherCategoria = { filtroCategoria = it },
+                )
             }
 
             when {
@@ -161,6 +198,20 @@ fun AgendaScreen(
                     aoAdicionar = viewModel::abrirFormulario,
                 )
 
+                filtradas.isEmpty() -> Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(24.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "Nenhum candidato encontrado com esse filtro.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+
                 else -> LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(
@@ -171,7 +222,7 @@ fun AgendaScreen(
                     ),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    items(listaVisivel, key = { it.id }) { entrevista ->
+                    items(filtradas, key = { it.id }) { entrevista ->
                         CartaoEntrevista(
                             entrevista = entrevista,
                             aoIniciar = { aoAbrirEntrevista(entrevista.id) },
@@ -193,6 +244,7 @@ fun AgendaScreen(
                             aoEncerrar = { viewModel.encerrar(entrevista.id) },
                             aoAlterarHorario = { viewModel.abrirHorario(entrevista.id) },
                             aoVoltarHorarioPadrao = { viewModel.voltarAoHorarioCalculado(entrevista.id) },
+                            aoExportarPdf = { viewModel.exportarPdfDoCandidato(context, entrevista.id) },
                         )
                     }
                 }
@@ -216,6 +268,7 @@ fun AgendaScreen(
             estado = estado,
             aoAlterarNome = viewModel::aoAlterarNome,
             aoAlterarTelefone = viewModel::aoAlterarTelefone,
+            aoAlterarCategoria = viewModel::aoAlterarCategoria,
             aoAlterarModoCurriculo = viewModel::aoAlterarModoCurriculo,
             aoAlterarResumoCurriculo = viewModel::aoAlterarResumoCurriculo,
             aoSelecionarArquivo = viewModel::aoSelecionarArquivo,
@@ -486,6 +539,7 @@ private fun CartaoEntrevista(
     aoEncerrar: () -> Unit,
     aoAlterarHorario: () -> Unit,
     aoVoltarHorarioPadrao: () -> Unit,
+    aoExportarPdf: () -> Unit,
 ) {
     var menuAberto by remember { mutableStateOf(false) }
     var confirmarRemocao by remember { mutableStateOf(false) }
@@ -550,6 +604,15 @@ private fun CartaoEntrevista(
                     )
                 }
                 SeloStatus(entrevista.status, modifier = Modifier.padding(top = 6.dp))
+
+                if (entrevista.categoria.isNotBlank()) {
+                    Text(
+                        text = entrevista.categoria,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
             }
 
             when {
@@ -684,6 +747,11 @@ private fun CartaoEntrevista(
                         onClick = { menuAberto = false; aoReabrir() },
                     )
                     DropdownMenuItem(
+                        text = { Text("Exportar PDF do candidato") },
+                        leadingIcon = { Icon(Icons.Filled.Share, null) },
+                        onClick = { menuAberto = false; aoExportarPdf() },
+                    )
+                    DropdownMenuItem(
                         text = { Text("Remover candidato") },
                         leadingIcon = { Icon(Icons.Filled.Delete, null) },
                         enabled = !emAndamento,
@@ -716,6 +784,7 @@ private fun LinhaAcoesDoDia(
     mostrarEncerradas: Boolean,
     aoEncerrarAvaliados: () -> Unit,
     aoAlternarEncerradas: () -> Unit,
+    aoExportarPdf: () -> Unit,
 ) {
     var confirmarEncerramento by remember { mutableStateOf(false) }
 
@@ -726,6 +795,10 @@ private fun LinhaAcoesDoDia(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        TextButton(onClick = aoExportarPdf) {
+            Icon(Icons.Filled.Share, contentDescription = null)
+            Text("Exportar PDF", modifier = Modifier.padding(start = 6.dp))
+        }
         if (quantidadeEncerravel > 0) {
             OutlinedButton(onClick = { confirmarEncerramento = true }) {
                 Icon(Icons.Filled.DoneAll, contentDescription = null)
@@ -781,6 +854,51 @@ private fun LinhaAcoesDoDia(
 }
 
 @Composable
+private fun FiltrosAgenda(
+    busca: String,
+    categorias: List<String>,
+    filtroCategoria: String?,
+    aoAlterarBusca: (String) -> Unit,
+    aoEscolherCategoria: (String?) -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        OutlinedTextField(
+            value = busca,
+            onValueChange = aoAlterarBusca,
+            label = { Text("Buscar por nome") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        if (categorias.isNotEmpty()) {
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                FilterChip(
+                    selected = filtroCategoria == null,
+                    onClick = { aoEscolherCategoria(null) },
+                    label = { Text("Todas") },
+                )
+                categorias.forEach { categoria ->
+                    FilterChip(
+                        selected = filtroCategoria == categoria,
+                        onClick = {
+                            aoEscolherCategoria(if (filtroCategoria == categoria) null else categoria)
+                        },
+                        label = { Text(categoria) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun SeloStatus(status: StatusEntrevista, modifier: Modifier = Modifier) {
     val (corDoFundo, corDoTexto) = when (status) {
         StatusEntrevista.AGENDADA ->
@@ -814,6 +932,7 @@ private fun DialogoAdicionarCandidato(
     estado: EstadoAgenda,
     aoAlterarNome: (String) -> Unit,
     aoAlterarTelefone: (String) -> Unit,
+    aoAlterarCategoria: (String) -> Unit,
     aoAlterarModoCurriculo: (ModoCurriculo) -> Unit,
     aoAlterarResumoCurriculo: (String) -> Unit,
     aoSelecionarArquivo: (android.net.Uri) -> Unit,
@@ -876,6 +995,12 @@ private fun DialogoAdicionarCandidato(
                     rotulo = "Telefone",
                     telefone = true,
                     placeholder = "(35) 99999-9999",
+                )
+                CampoTexto(
+                    valor = estado.categoria,
+                    aoAlterar = aoAlterarCategoria,
+                    rotulo = "Categoria (opcional)",
+                    dica = "Ex.: Vendas, Produção, Administrativo.",
                 )
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Work
 import androidx.compose.material3.AlertDialog
@@ -65,6 +66,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -95,6 +97,7 @@ fun EntrevistaScreen(
 ) {
     val estado by viewModel.estado.collectAsStateWithLifecycle()
     val snackbarHost = remember { SnackbarHostState() }
+    val context = LocalContext.current
     var confirmarFinalizacao by remember { mutableStateOf(false) }
 
     val seletorArquivo = rememberLauncherForActivityResult(
@@ -122,6 +125,13 @@ fun EntrevistaScreen(
                 navigationIcon = {
                     IconButton(onClick = aoVoltar) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Voltar")
+                    }
+                },
+                actions = {
+                    if (estado.entrevista != null) {
+                        IconButton(onClick = { viewModel.exportarPdf(context) }) {
+                            Icon(Icons.Filled.Share, contentDescription = "Exportar PDF")
+                        }
                     }
                 },
             )

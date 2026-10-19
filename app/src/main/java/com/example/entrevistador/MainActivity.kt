@@ -1,9 +1,14 @@
 package com.example.entrevistador
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
@@ -13,6 +18,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -107,6 +114,21 @@ private fun FluxoLogin(container: AppContainer) {
 private fun FluxoLogado(container: AppContainer, usuario: Usuario) {
     val navController = rememberNavController()
     val authViewModel = criarViewModel(container) { AuthViewModel(container.authRepository) }
+    val contexto = LocalContext.current
+    val pedirPermissao = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { }
+
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(
+                contexto,
+                Manifest.permission.POST_NOTIFICATIONS,
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            pedirPermissao.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
 
     CascaApp(
         navController = navController,
@@ -126,6 +148,8 @@ private fun FluxoLogado(container: AppContainer, usuario: Usuario) {
                             container.definicoesRepository,
                             container.anexoRepository,
                             container.vagaRepository,
+                            container.roteiroRepository,
+                            container.formularioRepository,
                         )
                     },
                     aoAbrirEntrevista = { id -> navController.abrirEntrevista(id) },

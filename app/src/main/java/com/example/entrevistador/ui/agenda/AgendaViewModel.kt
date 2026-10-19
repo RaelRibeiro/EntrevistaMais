@@ -1,11 +1,15 @@
 package com.example.entrevistador.ui.agenda
 
+import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.entrevistador.core.PdfExport
 import com.example.entrevistador.data.repository.AnexoRepository
 import com.example.entrevistador.data.repository.DefinicoesRepository
+import com.example.entrevistador.data.repository.EntrevistaFormularioRepository
 import com.example.entrevistador.data.repository.EntrevistaRepository
+import com.example.entrevistador.data.repository.RoteiroRepository
 import com.example.entrevistador.data.repository.VagaRepository
 import com.example.entrevistador.domain.OrdenacaoAgenda
 import com.example.entrevistador.domain.model.DefinicoesPadrao
@@ -40,6 +44,7 @@ data class EstadoAgenda(
     val mostrarFormulario: Boolean = false,
     val nome: String = "",
     val telefone: String = "",
+    val categoria: String = "",
     val modoCurriculo: ModoCurriculo = ModoCurriculo.RESUMO,
     val resumoCurriculo: String = "",
     val tipoArquivo: TipoCurriculo = TipoCurriculo.PDF,
@@ -74,6 +79,8 @@ class AgendaViewModel(
     private val definicoesRepository: DefinicoesRepository,
     private val anexoRepository: AnexoRepository,
     private val vagaRepository: VagaRepository,
+    private val roteiroRepository: RoteiroRepository,
+    private val formularioRepository: EntrevistaFormularioRepository,
 ) : ViewModel() {
 
     private val _data = MutableStateFlow(LocalDate.now())
@@ -117,6 +124,7 @@ class AgendaViewModel(
             mostrarFormulario = formulario.aberto,
             nome = formulario.nome,
             telefone = formulario.telefone,
+            categoria = formulario.categoria,
             modoCurriculo = formulario.modoCurriculo,
             resumoCurriculo = formulario.resumoCurriculo,
             tipoArquivo = formulario.tipoArquivo,
@@ -192,6 +200,8 @@ class AgendaViewModel(
 
     fun aoAlterarTelefone(valor: String) = _formulario.update { it.copy(telefone = valor) }
 
+    fun aoAlterarCategoria(valor: String) = _formulario.update { it.copy(categoria = valor) }
+
     fun aoAlterarResumoCurriculo(valor: String) = _formulario.update {
         it.copy(resumoCurriculo = valor, erroGeral = null)
     }
@@ -244,6 +254,7 @@ class AgendaViewModel(
                 data = _data.value,
                 nome = formulario.nome,
                 telefone = formulario.telefone,
+                categoria = formulario.categoria,
                 resumoCurriculo = formulario.resumoCurriculo,
                 tipoCurriculo = if (formulario.modoCurriculo == ModoCurriculo.RESUMO) {
                     TipoCurriculo.RESUMO
@@ -400,6 +411,42 @@ class AgendaViewModel(
         _mensagem.value = null
     }
 
+    fun exportarPdfDoCandidato(context: Context, id: Long) {
+        viewModelScope.launch {
+            val entrevista = entrevistaRepository.buscarPorId(id)
+            if (entrevista == null) {
+                _mensagem.value = "Candidato não encontrado."
+                return@launch
+            }
+            val resultado = runCatching {
+                val roteiro = roteiroRepository.obterParaEntrevista(entrevista.vagaId)
+                val respostas = formularioRepository.observarRespostas(id).first()
+                val experiencias = formularioRepository.obterExperiencias(id)
+                val vaga = entrevista.vagaId?.let { vagaRepository.buscarPorId(it) }
+                PdfExport.candidato(context, entrevista, roteiro, respostas, experiencias, vaga)
+            }
+            resultado
+                .onSuccess { arquivo ->
+                    PdfExport.compartilhar(context, arquivo, "Currículo de ${entrevista.nome}")
+                }
+                .onFailure { _mensagem.value = "Não foi possível gerar o PDF." }
+        }
+    }
+
+    fun exportarPdfDaAgenda(context: Context) {
+        viewModelScope.launch {
+            val atual = estado.value
+            val resultado = runCatching {
+                PdfExport.agenda(context, atual.data, atual.entrevistas + atual.encerradas, atual.vagas)
+            }
+            resultado
+                .onSuccess { arquivo ->
+                    PdfExport.compartilhar(context, arquivo, "Agenda de ${atual.data}")
+                }
+                .onFailure { _mensagem.value = "Não foi possível gerar o PDF." }
+        }
+    }
+
     data class Horario(
         val aberto: Boolean = false,
         val entrevistaId: Long? = null,
@@ -411,6 +458,7 @@ class AgendaViewModel(
         val aberto: Boolean = false,
         val nome: String = "",
         val telefone: String = "",
+        val categoria: String = "",
         val modoCurriculo: ModoCurriculo = ModoCurriculo.RESUMO,
         val resumoCurriculo: String = "",
         val caminhoArquivo: String = "",

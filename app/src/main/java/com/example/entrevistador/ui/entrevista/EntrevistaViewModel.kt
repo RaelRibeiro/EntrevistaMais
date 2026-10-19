@@ -1,8 +1,10 @@
 package com.example.entrevistador.ui.entrevista
 
+import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.entrevistador.core.PdfExport
 import com.example.entrevistador.data.repository.AnexoRepository
 import com.example.entrevistador.data.repository.EntrevistaFormularioRepository
 import com.example.entrevistador.data.repository.EntrevistaRepository
@@ -321,6 +323,38 @@ class EntrevistaViewModel(
     }
 
     fun consumirMensagem() = _estado.update { it.copy(mensagem = null) }
+
+    fun exportarPdf(context: Context) {
+        val atual = _estado.value
+        val entrevista = atual.entrevista ?: return
+        val resultado = runCatching {
+            val experiencias = atual.experiencias.mapIndexed { indice, linha ->
+                Experiencia(
+                    id = linha.id,
+                    entrevistaId = entrevista.id,
+                    ordem = indice,
+                    local = linha.local,
+                    ano = linha.ano,
+                    duracao = linha.duracao,
+                    cargo = linha.cargo,
+                    motivoSaida = linha.motivoSaida,
+                )
+            }
+            PdfExport.candidato(
+                context = context,
+                entrevista = entrevista,
+                roteiro = atual.roteiro,
+                respostas = atual.respostasPorPergunta,
+                experiencias = experiencias,
+                vaga = atual.vaga,
+            )
+        }
+        resultado
+            .onSuccess { arquivo ->
+                PdfExport.compartilhar(context, arquivo, "Currículo de ${entrevista.nome}")
+            }
+            .onFailure { _estado.update { estado -> estado.copy(mensagem = "Não foi possível gerar o PDF.") } }
+    }
 
     fun valorExibido(pergunta: Pergunta): String {
         val digitado = _estado.value.respostasPorPergunta[pergunta.id].orEmpty()

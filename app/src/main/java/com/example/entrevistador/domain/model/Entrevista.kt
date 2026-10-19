@@ -39,6 +39,7 @@ data class Entrevista(
     val duracaoMinutos: Int,
     val nome: String,
     val telefone: String,
+    val categoria: String = "",
     val curriculo: String = "",
     val status: StatusEntrevista = StatusEntrevista.AGENDADA,
     val ordem: Int = 0,

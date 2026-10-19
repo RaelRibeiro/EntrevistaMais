@@ -1,6 +1,7 @@
 package com.example.entrevistador
 
 import android.app.Application
+import com.example.entrevistador.core.Lembretes
 import com.example.entrevistador.di.AppContainer
 import com.example.entrevistador.di.DefaultAppContainer
 import kotlinx.coroutines.CoroutineScope
@@ -20,6 +21,8 @@ class EntrevistaMaisApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         container = DefaultAppContainer(this)
+        Lembretes.criarCanal(this)
+        Lembretes.agendar(this)
         scope.launch {
 
             container.authRepository.usuarioAtual.filterNotNull().first()

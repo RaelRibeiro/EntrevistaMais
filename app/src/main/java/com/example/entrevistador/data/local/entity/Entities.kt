@@ -26,6 +26,7 @@ data class EntrevistaEntity(
     val duracaoMinutos: Int,
     val nome: String,
     val telefone: String,
+    @ColumnInfo(defaultValue = "") val categoria: String = "",
     val curriculo: String = "",
     val status: com.example.entrevistador.domain.model.StatusEntrevista =
         com.example.entrevistador.domain.model.StatusEntrevista.AGENDADA,
@@ -54,6 +55,7 @@ fun EntrevistaEntity.paraDominio(): com.example.entrevistador.domain.model.Entre
         duracaoMinutos = duracaoMinutos,
         nome = nome,
         telefone = telefone,
+        categoria = categoria,
         curriculo = curriculo,
         status = status,
         ordem = ordem,
@@ -76,6 +78,7 @@ fun com.example.entrevistador.domain.model.Entrevista.paraEntidade(): Entrevista
         duracaoMinutos = duracaoMinutos,
         nome = nome,
         telefone = telefone,
+        categoria = categoria,
         curriculo = curriculo,
         status = status,
         ordem = ordem,
