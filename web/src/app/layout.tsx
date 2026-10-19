@@ -3,9 +3,11 @@ import { AuthProvider } from '@/context/AuthContext';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'EntrevistaMais',
+  title: 'EntrevistaMais — agenda de entrevistas para recrutadores',
   description:
-    'Agenda de entrevistas para recrutadores: candidatos, vagas, roteiro de perguntas e respostas, na dificuldade do dia a dia.',
+    'Agenda de entrevistas que calcula os horários sozinha: candidatos, vagas, currículos, roteiro de perguntas e decisões no mesmo lugar. No app e no site, com a mesma conta.',
+  applicationName: 'EntrevistaMais',
+  manifest: '/manifest.webmanifest',
 };
 
 export const viewport: Viewport = {
