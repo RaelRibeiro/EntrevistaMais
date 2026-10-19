@@ -20,6 +20,9 @@ O EntrevistaMais inverte a lógica: quem define as regras do dia (horário de in
 - Remoção/movimentação de candidatos dispara o recálculo de todo o restante do dia
 - Horário manual com marcação de "Horário alterado" e botão para voltar ao horário calculado
 - Encerramento em lote dos avaliados de um dia
+- **Categoria** opcional no candidato + busca por nome e chips de filtro por categoria
+- **Exportação em PDF** da agenda do dia e do currículo do candidato (compartilhável no app, impressão no site)
+- **Notificações locais** avisando 15 minutos antes de cada entrevista (WorkManager)
 
 **Entrevista**
 - Fluxo completo: `AGENDADA → EM_ANDAMENTO → CONCLUÍDA → APROVADO/REPROVADO/ENCERRADA`
@@ -45,12 +48,17 @@ O EntrevistaMais inverte a lógica: quem define as regras do dia (horário de in
 - Dados isolados por usuário (`usuarios/{uid}/...`) — nenhum recrutador enxerga o dado do outro
 - Sessão persistente no app (DataStore) e no site
 
+**Site**
+- Mesmas regras e textos do app, com navegação própria para telas largas
+- Cache persistente do Firestore (multi-aba) com aviso quando o navegador fica offline
+- Exportação para PDF pela impressão do navegador (agenda do dia e ficha do candidato)
+
 ## Stack
 
 | Camada | Tecnologias |
 | --- | --- |
 | Android | Kotlin 2.2, Jetpack Compose (BOM 2026.09), Material 3, Navigation Compose, ViewModel + StateFlow |
-| Android — dados | Room (cache offline), Firebase Auth, Cloud Firestore, DataStore (sessão) |
+| Android — dados | Room (cache offline), Firebase Auth, Cloud Firestore, DataStore (sessão), WorkManager (lembretes) |
 | Android — build | Gradle Kotlin DSL, version catalog (`libs.versions.toml`), desugaring de `java.time` para minSdk 24 |
 | Web | Next.js 15 (App Router), React 19, TypeScript 5.7, CSS puro (design system próprio) |
 | Web — dados | Firebase JS SDK 11 (Auth + Firestore), listeners em tempo real |
@@ -65,7 +73,7 @@ Arquitetura em camadas com injeção de dependência manual (sem framework de DI
 
 ```
 com.example.entrevistador
-├── core/        Formatters, constantes e utilidades puros
+├── core/        Formatters, constantes, exportação em PDF e agendamento de lembretes
 ├── domain/      Modelos de negócio (Entrevista, Roteiro, Definicoes) + regras
 │                de cálculo de agenda (AgendaScheduler, OrdenacaoAgenda)
 ├── data/
@@ -148,22 +156,39 @@ Para usar com o seu projeto, troque as credenciais nos dois arquivos e publique 
 - **Android**: APK assinado com keystore próprio, `versionCode` incrementado a cada release e verificado com `apksigner` (esquemas v1, v2 e v3 ativos — exigência do Android 11+).
 - **Web**: `git push` em `master` dispara o deploy automático no Vercel.
 
+### Google Play (app bundle)
+
+```bash
+.\gradlew.bat bundleRelease
+# gera app/build/outputs/bundle/release/app-release.aab
+```
+
+1. No [Play Console](https://play.google.com/console), crie o app e preencha a ficha da loja (nome, descrição, ícone, capturas de tela).
+2. Em **Teste → Track interno**, crie uma versão e envie o `app-release.aab`.
+3. Preencha **Segurança dos dados** e a **Política de privacidade**. O app usa: e-mail (Firebase Auth), nome/telefone e currículo dos candidatos (Firestore) — nada é compartilhado com terceiros.
+4. Adicione os e-mails dos testadores e publique o track interno; a revisão leva de algumas horas a poucos dias.
+5. Para produção, repita o envio do `.aab` no track de produção após validar o interno.
+
 ## Decisões técnicas que valem destaque
 
 1. **Domínio único, duas implementações** — a regra de negócio (cálculo de horários, validações, fluxo de status) existe em Kotlin e em TypeScript. Isso mantém o app e o site em sincronia sem um backend próprio.
 2. **Recálculo em cascata** — remover, remarcar ou alterar o horário de um candidato reordena o dia inteiro. Feito nos dois lados com a mesma lógica de fila por minutos.
 3. **Arquivo sem Storage** — o currículo em Base64 no Firestore removeu uma dependência de infraestrutura e o custo fixo do Storage.
 4. **Cache offline com Room** — o app continua utilizável sem rede; quando volta, o Firestore reconcilia por listener.
-5. **Compatibilidade mínima de 4.000 dispositivos** — `minSdk 24` com desugaring de `java.time` para não perder o suporte a aparelhos Android 7.
-6. **Assinatura moderna** — v1 + v2 + v3 para funcionar de Android 7 até as versões mais recentes sem alerta de instalação insegura.
+5. **PDF sem biblioteca externa** — o app desenha a agenda e a ficha do candidato com o `PdfDocument` nativo e compartilha via `FileProvider`; o site usa a impressão do navegador com uma folha de estilo dedicada.
+6. **Lembretes sem servidor** — um `PeriodicWork` de 15 minutos consulta o cache local e notifica só quem começa em seguida, guardando o que já avisou para não repetir.
+7. **Compatibilidade mínima de 4.000 dispositivos** — `minSdk 24` com desugaring de `java.time` para não perder o suporte a aparelhos Android 7.
+8. **Assinatura moderna** — v1 + v2 + v3 para funcionar de Android 7 até as versões mais recentes sem alerta de instalação insegura.
 
 ## Roadmap
 
-- [ ] Categorias e filtros de candidatos
-- [ ] Exportação da agenda em PDF
-- [ ] Notificações locais de entrevista próxima
+- [x] Categorias e filtros de candidatos
+- [x] Exportação da agenda em PDF
+- [x] Exportação do candidato em PDF
+- [x] Notificações locais de entrevista próxima
+- [x] Modo offline completo no site
+- [x] Geração do app bundle (AAB) assinado para o Google Play
 - [ ] Publicação em track interno do Google Play
-- [ ] Modo offline completo no site
 
 ## Autor
 
