@@ -69,16 +69,18 @@ object PdfExport {
         val preenchidas = experiencias.filter { it.preenchida }
         if (preenchidas.isNotEmpty()) {
             documento.secao("Experiência profissional")
-            preenchidas.forEach { item ->
-                documento.paragrafo(
-                    buildString {
-                        append(listOf(item.local, item.cargo).filter { it.isNotBlank() }.joinToString(" — "))
-                        if (item.ano.isNotBlank()) append("  |  ${item.ano}")
-                        if (item.duracao.isNotBlank()) append("  |  ${item.duracao}")
-                        if (item.motivoSaida.isNotBlank()) append("\nMotivo da saída: ${item.motivoSaida}")
-                    },
-                )
-            }
+            documento.tabela(
+                colunas = listOf(
+                    "Local" to 2f,
+                    "Ano" to 0.9f,
+                    "Duração" to 1.1f,
+                    "Cargo" to 1.4f,
+                    "Motivo da saída" to 1.8f,
+                ),
+                linhas = preenchidas.map { item ->
+                    listOf(item.local, item.ano, item.duracao, item.cargo, item.motivoSaida)
+                },
+            )
         }
 
         documento.secao(roteiro?.titulo ?: "Roteiro")
@@ -194,6 +196,19 @@ private class Escritor {
         strokeWidth = 0.7f
         color = Color.rgb(200, 200, 200)
     }
+    private val pincelLinhaForte = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        strokeWidth = 0.9f
+        color = Color.rgb(130, 130, 130)
+    }
+    private val pincelTabelaCabecalho = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textSize = 9.5f
+        isFakeBoldText = true
+        color = Color.rgb(20, 33, 61)
+    }
+    private val pincelTabela = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textSize = 9.5f
+        color = Color.rgb(40, 40, 40)
+    }
 
     init {
         abrirPagina()
@@ -249,6 +264,79 @@ private class Escritor {
     fun paragrafo(texto: String) {
         quebrar(texto, pincelCorpo, 14f)
         y += 3f
+    }
+
+    fun tabela(colunas: List<Pair<String, Float>>, linhas: List<List<String>>) {
+        val espacoCelula = 5f
+        val alturaLinha = 12f
+        val somaPesos = colunas.sumOf { it.second.toDouble() }.toFloat()
+        val larguras = colunas.map { LARGURA_UTIL * it.second / somaPesos }
+        val limites = larguras.runningFold(MARGEM) { total, largura -> total + largura }
+
+        fun desenharCabecalho() {
+            val quebradas = colunas.mapIndexed { indice, (rotulo, _) ->
+                encolher(rotulo, pincelTabelaCabecalho, larguras[indice] - espacoCelula)
+            }
+            val altura = quebradas.maxOf { it.size } * alturaLinha + espacoCelula * 2
+            if (!caber(altura)) abrirPagina()
+            val topo = y
+            quebradas.forEachIndexed { indice, linhasDaCelula ->
+                linhasDaCelula.forEachIndexed { indiceLinha, textoDaCelula ->
+                    canvas?.drawText(
+                        textoDaCelula,
+                        limites[indice] + espacoCelula / 2,
+                        topo + espacoCelula + alturaLinha * (indiceLinha + 1) - 3f,
+                        pincelTabelaCabecalho,
+                    )
+                }
+            }
+            y = topo + altura
+            canvas?.drawLine(MARGEM, y, MARGEM + LARGURA_UTIL, y, pincelLinhaForte)
+        }
+
+        if (linhas.isEmpty()) return
+        desenharCabecalho()
+
+        linhas.forEach { celulas ->
+            val quebradas = celulas.mapIndexed { indice, valor ->
+                encolher(valor, pincelTabela, larguras[indice] - espacoCelula)
+            }
+            val altura = quebradas.maxOf { it.size } * alturaLinha + espacoCelula * 2
+            if (!caber(altura)) {
+                abrirPagina()
+                desenharCabecalho()
+            }
+            val topo = y
+            quebradas.forEachIndexed { indice, linhasDaCelula ->
+                linhasDaCelula.forEachIndexed { indiceLinha, textoDaCelula ->
+                    canvas?.drawText(
+                        textoDaCelula,
+                        limites[indice] + espacoCelula / 2,
+                        topo + espacoCelula + alturaLinha * (indiceLinha + 1) - 3f,
+                        pincelTabela,
+                    )
+                }
+            }
+            y = topo + altura
+            canvas?.drawLine(MARGEM, y, MARGEM + LARGURA_UTIL, y, pincelLinha)
+        }
+    }
+
+    private fun encolher(texto: String, pincel: Paint, largura: Float): List<String> {
+        if (texto.isBlank()) return listOf("")
+        val linhas = mutableListOf<String>()
+        var atual = StringBuilder()
+        texto.split(' ').forEach { palavra ->
+            val tentativa = if (atual.isEmpty()) palavra else "$atual $palavra"
+            if (pincel.measureText(tentativa) <= largura) {
+                atual = StringBuilder(tentativa)
+            } else {
+                if (atual.isNotEmpty()) linhas.add(atual.toString())
+                atual = StringBuilder(palavra)
+            }
+        }
+        if (atual.isNotEmpty()) linhas.add(atual.toString())
+        return linhas
     }
 
     private fun quebrar(texto: String, pincel: Paint, alturaLinha: Float) {
